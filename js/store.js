@@ -107,6 +107,12 @@ export const store = {
     persist();
     return m;
   },
+  updateMovement(id, patch) {
+    const existing = data.movements.find((m) => m.id === id);
+    if (existing) Object.assign(existing, patch);
+    persist();
+    return existing;
+  },
   removeMovement(id) {
     data.movements = data.movements.filter((m) => m.id !== id);
     persist();

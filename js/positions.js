@@ -35,7 +35,11 @@ export function renderPositions(container) {
       const plusvalia = valorActual != null ? valorActual - aportado : null;
       return { asset: a, valorActual, aportado, plusvalia };
     })
-    .sort((a, b) => (b.valorActual || 0) - (a.valorActual || 0));
+    .sort((a, b) => {
+      const entityCmp = entityName(a.asset.entityId).localeCompare(entityName(b.asset.entityId), "es");
+      if (entityCmp !== 0) return entityCmp;
+      return a.asset.name.localeCompare(b.asset.name, "es");
+    });
 
   container.innerHTML = `
     <div class="section-head">

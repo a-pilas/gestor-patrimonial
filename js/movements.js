@@ -54,7 +54,10 @@ export function renderMovements(container) {
                     <td>${asset?.name || "—"}</td>
                     <td>${m.units ?? "—"}</td>
                     <td>${fmtEUR(m.amount)}</td>
-                    <td><button data-remove="${m.id}" class="link-btn danger">eliminar</button></td>
+                    <td>
+                      <button data-edit="${m.id}" class="link-btn">editar</button>
+                      <button data-remove="${m.id}" class="link-btn danger">eliminar</button>
+                    </td>
                   </tr>`;
                 })
                 .join("") || '<tr><td colspan="7" class="muted">Sin movimientos todavía</td></tr>'
@@ -65,29 +68,35 @@ export function renderMovements(container) {
     </section>
   `;
 
-  function openMovementForm() {
-    openModal("Nuevo movimiento", (body, closeModal) => {
+  function openMovementForm(editing) {
+    openModal(editing ? "Editar movimiento" : "Nuevo movimiento", (body, closeModal) => {
       body.innerHTML = `
         <form id="form-movement" class="stacked-form">
-          <label>Fecha <input name="date" type="date" value="${todayIso()}" required /></label>
+          <label>Fecha <input name="date" type="date" value="${editing?.date || todayIso()}" required /></label>
           <label>Tipo
-            <select name="type" required>${Object.entries(MOVEMENT_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>
+            <select name="type" required>${Object.entries(MOVEMENT_TYPES)
+              .map(([k, v]) => `<option value="${k}" ${k === editing?.type ? "selected" : ""}>${v}</option>`)
+              .join("")}</select>
           </label>
           <label>Activo relacionado
-            <select name="assetId"><option value="">(ninguno / efectivo)</option>${data.assets.map((a) => `<option value="${a.id}">${assetLabel(a)}</option>`).join("")}</select>
+            <select name="assetId"><option value="">(ninguno / efectivo)</option>${data.assets
+              .map((a) => `<option value="${a.id}" ${a.id === editing?.assetId ? "selected" : ""}>${assetLabel(a)}</option>`)
+              .join("")}</select>
           </label>
           <label>Entidad
-            <select name="entityId" required>${data.entities.map((e) => `<option value="${e.id}">${e.name}</option>`).join("")}</select>
+            <select name="entityId" required>${data.entities
+              .map((e) => `<option value="${e.id}" ${e.id === editing?.entityId ? "selected" : ""}>${e.name}</option>`)
+              .join("")}</select>
           </label>
           <label id="units-field" style="display:none">Unidades / participaciones
-            <input name="units" type="number" step="any" />
+            <input name="units" type="number" step="any" value="${editing?.units ?? ""}" />
           </label>
           <label id="nav-field" style="display:none">Valor liquidativo (€/participación)
-            <input name="navValue" type="number" step="any" />
+            <input name="navValue" type="number" step="any" value="${editing?.navValue ?? ""}" />
           </label>
-          <label>Importe (€) <input name="amount" type="number" step="any" required /></label>
-          <label>Notas <input name="notes" placeholder="Opcional" /></label>
-          <button type="submit">Guardar movimiento</button>
+          <label>Importe (€) <input name="amount" type="number" step="any" value="${editing?.amount ?? ""}" required /></label>
+          <label>Notas <input name="notes" placeholder="Opcional" value="${editing?.notes || ""}" /></label>
+          <button type="submit">${editing ? "Guardar cambios" : "Guardar movimiento"}</button>
         </form>
       `;
 
@@ -136,7 +145,7 @@ export function renderMovements(container) {
         ev.preventDefault();
         const fd = new FormData(form);
         const asset = assetById(fd.get("assetId"));
-        store.addMovement({
+        const payload = {
           date: fd.get("date"),
           type: fd.get("type"),
           entityId: asset ? asset.entityId : fd.get("entityId"),
@@ -145,14 +154,26 @@ export function renderMovements(container) {
           navValue: fd.get("navValue") ? Number(fd.get("navValue")) : null,
           amount: Number(fd.get("amount")),
           notes: fd.get("notes") || "",
-        });
+        };
+        if (editing) {
+          store.updateMovement(editing.id, payload);
+        } else {
+          store.addMovement(payload);
+        }
         closeModal();
         renderMovements(container);
       });
     });
   }
 
-  container.querySelector("#btn-new-movement").addEventListener("click", openMovementForm);
+  container.querySelector("#btn-new-movement").addEventListener("click", () => openMovementForm(null));
+
+  container.querySelectorAll("[data-edit]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const mov = data.movements.find((m) => m.id === btn.dataset.edit);
+      openMovementForm(mov);
+    })
+  );
 
   container.querySelectorAll("[data-remove]").forEach((btn) =>
     btn.addEventListener("click", () => {
