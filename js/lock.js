@@ -7,6 +7,13 @@
 const PIN_KEY = "gestorPatrimonial:pin";
 const SESSION_KEY = "gestorPatrimonial:unlocked";
 
+// crypto.subtle solo existe en contextos seguros (https:// o localhost). Si
+// la app se abre por http:// (p.ej. mientras el certificado del dominio
+// propio todavía no está emitido), no hay forma de cifrar la contraseña.
+function cryptoAvailable() {
+  return typeof crypto !== "undefined" && !!crypto.subtle;
+}
+
 async function sha256(text) {
   const enc = new TextEncoder().encode(text);
   const buf = await crypto.subtle.digest("SHA-256", enc);
@@ -58,6 +65,10 @@ function overlay() {
 
 export function ensureUnlocked() {
   return new Promise((resolve) => {
+    if (!cryptoAvailable()) {
+      renderCryptoUnavailable(resolve);
+      return;
+    }
     const stored = getStoredPin();
     if (!stored) {
       renderSetup(resolve);
@@ -68,6 +79,22 @@ export function ensureUnlocked() {
       return;
     }
     renderUnlock(stored, resolve);
+  });
+}
+
+function renderCryptoUnavailable(resolve) {
+  const el = overlay();
+  el.innerHTML = `
+    <div class="lock-card">
+      <h2>Candado no disponible</h2>
+      <p class="muted">Esta conexión no es segura (falta HTTPS), así que el navegador no permite cifrar la contraseña y el candado no se puede activar aquí todavía. Esto es normal justo después de configurar un dominio propio: el certificado puede tardar unas horas en emitirse.</p>
+      <p class="muted">Mientras tanto puedes seguir usando la app con normalidad.</p>
+      <button type="button" id="lock-continue">Continuar sin candado</button>
+    </div>
+  `;
+  el.querySelector("#lock-continue").addEventListener("click", () => {
+    el.remove();
+    resolve();
   });
 }
 

@@ -1,4 +1,4 @@
-const CACHE = "gestor-patrimonial-v7";
+const CACHE = "gestor-patrimonial-v8";
 const ASSETS = [
   "./",
   "./index.html",
@@ -33,10 +33,12 @@ self.addEventListener("activate", (event) => {
 
 // Red primero: siempre coge la versión más reciente si hay conexión,
 // y solo usa la copia local guardada cuando no hay internet.
+// cache:"no-store" evita que la caché HTTP del navegador (no la de esta
+// app) sirva una versión vieja sin llegar siquiera a preguntar al servidor.
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: "no-store" })
       .then((response) => {
         const copy = response.clone();
         caches.open(CACHE).then((cache) => cache.put(event.request, copy));
