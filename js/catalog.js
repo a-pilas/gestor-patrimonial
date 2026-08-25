@@ -57,27 +57,29 @@ export function renderCatalog(container) {
               </form>`
         }
 
-        <table class="table">
-          <thead><tr><th>Nombre</th><th>Entidad</th><th>Clase</th><th>Subclase</th><th>ISIN</th><th>Riesgo</th><th></th></tr></thead>
-          <tbody>
-            ${data.assets
-              .map(
-                (a) => `<tr>
-                  <td>${a.name}</td>
-                  <td>${a.entityId ? entityName(a.entityId) : '<span class="neg">sin asignar</span>'}</td>
-                  <td>${ASSET_CLASSES[a.class]?.label || a.class}</td>
-                  <td>${a.subclass || "—"}${a.class === "mixto" && a.mixRvPct != null ? ` (${a.mixRvPct}% RV / ${100 - a.mixRvPct}% RF)` : ""}</td>
-                  <td>${a.isin || "—"}</td>
-                  <td>${a.riskScore ?? "—"}</td>
-                  <td>
-                    <button data-edit-asset="${a.id}" class="link-btn">editar</button>
-                    <button data-remove-asset="${a.id}" class="link-btn danger">eliminar</button>
-                  </td>
-                </tr>`
-              )
-              .join("") || '<tr><td colspan="7" class="muted">Sin activos todavía</td></tr>'}
-          </tbody>
-        </table>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Nombre</th><th>Entidad</th><th>Clase</th><th>Subclase</th><th>ISIN</th><th>Riesgo</th><th></th></tr></thead>
+            <tbody>
+              ${data.assets
+                .map(
+                  (a) => `<tr>
+                    <td>${a.name}</td>
+                    <td>${a.entityId ? entityName(a.entityId) : '<span class="neg">sin asignar</span>'}</td>
+                    <td>${ASSET_CLASSES[a.class]?.label || a.class}</td>
+                    <td>${a.subclass || "—"}${a.class === "mixto" && a.mixRvPct != null ? ` (${a.mixRvPct}% RV / ${100 - a.mixRvPct}% RF)` : ""}</td>
+                    <td>${a.isin || "—"}</td>
+                    <td>${a.riskScore ?? "—"}</td>
+                    <td>
+                      <button data-edit-asset="${a.id}" class="link-btn">editar</button>
+                      <button data-remove-asset="${a.id}" class="link-btn danger">eliminar</button>
+                    </td>
+                  </tr>`
+                )
+                .join("") || '<tr><td colspan="7" class="muted">Sin activos todavía</td></tr>'}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   `;

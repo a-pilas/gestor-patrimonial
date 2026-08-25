@@ -3,6 +3,9 @@ import { renderCatalog } from "./catalog.js";
 import { renderPositions } from "./positions.js";
 import { renderMovements } from "./movements.js";
 import { renderSettings } from "./settings.js";
+import { ensureUnlocked } from "./lock.js";
+
+await ensureUnlocked();
 
 const TABS = [
   { id: "inicio", label: "Inicio", render: renderDashboard },

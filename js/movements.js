@@ -38,28 +38,30 @@ export function renderMovements(container) {
 
     <section class="card">
       <h3>Histórico de movimientos</h3>
-      <table class="table table-history">
-        <thead><tr><th>Fecha</th><th>Tipo</th><th>Entidad</th><th>Activo</th><th>Unidades</th><th>Importe</th><th></th></tr></thead>
-        <tbody>
-          ${
-            sorted
-              .map((m) => {
-                const entity = data.entities.find((e) => e.id === m.entityId);
-                const asset = assetById(m.assetId);
-                return `<tr>
-                  <td>${m.date}</td>
-                  <td>${MOVEMENT_TYPES[m.type] || m.type}</td>
-                  <td>${entity?.name || "—"}</td>
-                  <td>${asset?.name || "—"}</td>
-                  <td>${m.units ?? "—"}</td>
-                  <td>${fmtEUR(m.amount)}</td>
-                  <td><button data-remove="${m.id}" class="link-btn danger">eliminar</button></td>
-                </tr>`;
-              })
-              .join("") || '<tr><td colspan="7" class="muted">Sin movimientos todavía</td></tr>'
-          }
-        </tbody>
-      </table>
+      <div class="table-wrap">
+        <table class="table table-history">
+          <thead><tr><th>Fecha</th><th>Tipo</th><th>Entidad</th><th>Activo</th><th>Unidades</th><th>Importe</th><th></th></tr></thead>
+          <tbody>
+            ${
+              sorted
+                .map((m) => {
+                  const entity = data.entities.find((e) => e.id === m.entityId);
+                  const asset = assetById(m.assetId);
+                  return `<tr>
+                    <td>${m.date}</td>
+                    <td>${MOVEMENT_TYPES[m.type] || m.type}</td>
+                    <td>${entity?.name || "—"}</td>
+                    <td>${asset?.name || "—"}</td>
+                    <td>${m.units ?? "—"}</td>
+                    <td>${fmtEUR(m.amount)}</td>
+                    <td><button data-remove="${m.id}" class="link-btn danger">eliminar</button></td>
+                  </tr>`;
+                })
+                .join("") || '<tr><td colspan="7" class="muted">Sin movimientos todavía</td></tr>'
+            }
+          </tbody>
+        </table>
+      </div>
     </section>
   `;
 

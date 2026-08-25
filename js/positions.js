@@ -45,62 +45,66 @@ export function renderPositions(container) {
 
     <section class="card">
       <h3>Resumen por activo</h3>
-      <table class="table">
-        <thead><tr><th>Activo</th><th>Entidad</th><th>Aportado</th><th>Valor actual</th><th>Plusvalía</th></tr></thead>
-        <tbody>
-          ${
-            resumenRows
-              .map(
-                (r) => `<tr>
-                  <td>${r.asset.name}</td>
-                  <td>${entityName(r.asset.entityId)}</td>
-                  <td>${fmtEUR(r.aportado)}</td>
-                  <td>${r.valorActual != null ? fmtEUR(r.valorActual) : '<span class="neg">sin posición</span>'}</td>
-                  <td class="${r.plusvalia >= 0 ? "pos" : "neg"}">${r.plusvalia != null ? fmtEUR(r.plusvalia) : "—"}</td>
-                </tr>`
-              )
-              .join("") || '<tr><td colspan="5" class="muted">Sin activos todavía</td></tr>'
-          }
-        </tbody>
-      </table>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Activo</th><th>Entidad</th><th>Aportado</th><th>Valor actual</th><th>Plusvalía</th></tr></thead>
+          <tbody>
+            ${
+              resumenRows
+                .map(
+                  (r) => `<tr>
+                    <td>${r.asset.name}</td>
+                    <td>${entityName(r.asset.entityId)}</td>
+                    <td>${fmtEUR(r.aportado)}</td>
+                    <td>${r.valorActual != null ? fmtEUR(r.valorActual) : `<button data-add-position="${r.asset.id}" class="link-btn danger">sin posición, añadir</button>`}</td>
+                    <td class="${r.plusvalia >= 0 ? "pos" : "neg"}">${r.plusvalia != null ? fmtEUR(r.plusvalia) : "—"}</td>
+                  </tr>`
+                )
+                .join("") || '<tr><td colspan="5" class="muted">Sin activos todavía</td></tr>'
+            }
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="card">
       <h3>Histórico de posiciones</h3>
-      <table class="table table-history">
-        <thead><tr><th>Fecha</th><th>Entidad</th><th>Activo</th><th>Unidades</th><th>Valor</th><th></th></tr></thead>
-        <tbody>
-          ${
-            sorted
-              .map((p) => {
-                const asset = assetById(p.assetId);
-                return `<tr>
-                  <td>${p.date}</td>
-                  <td>${asset ? entityName(asset.entityId) : "—"}</td>
-                  <td>${asset?.name || "—"}</td>
-                  <td>${p.units ?? "—"}</td>
-                  <td>${fmtEUR(p.value)}</td>
-                  <td>
-                    <button data-edit="${p.id}" class="link-btn">editar</button>
-                    <button data-remove="${p.id}" class="link-btn danger">eliminar</button>
-                  </td>
-                </tr>`;
-              })
-              .join("") || '<tr><td colspan="6" class="muted">Sin posiciones todavía</td></tr>'
-          }
-        </tbody>
-      </table>
+      <div class="table-wrap">
+        <table class="table table-history">
+          <thead><tr><th>Fecha</th><th>Entidad</th><th>Activo</th><th>Unidades</th><th>Valor</th><th></th></tr></thead>
+          <tbody>
+            ${
+              sorted
+                .map((p) => {
+                  const asset = assetById(p.assetId);
+                  return `<tr>
+                    <td>${p.date}</td>
+                    <td>${asset ? entityName(asset.entityId) : "—"}</td>
+                    <td>${asset?.name || "—"}</td>
+                    <td>${p.units ?? "—"}</td>
+                    <td>${fmtEUR(p.value)}</td>
+                    <td>
+                      <button data-edit="${p.id}" class="link-btn">editar</button>
+                      <button data-remove="${p.id}" class="link-btn danger">eliminar</button>
+                    </td>
+                  </tr>`;
+                })
+                .join("") || '<tr><td colspan="6" class="muted">Sin posiciones todavía</td></tr>'
+            }
+          </tbody>
+        </table>
+      </div>
     </section>
   `;
 
-  function openPositionForm(editing) {
+  function openPositionForm(editing, presetAssetId) {
     openModal(editing ? "Editar posición" : "Nueva posición", (body, closeModal) => {
       const isUnitTraded = (assetId) => {
         const a = assetById(assetId);
         return a && UNIT_TRADED_SUBCLASSES.includes(a.subclass);
       };
       const assetLabel = (a) => `${a.name} — ${entityName(a.entityId)}`;
-      const firstAssetId = editing?.assetId || data.assets[0].id;
+      const firstAssetId = editing?.assetId || presetAssetId || data.assets[0].id;
 
       body.innerHTML = `
         <form id="form-position" class="stacked-form">
@@ -165,6 +169,10 @@ export function renderPositions(container) {
   }
 
   container.querySelector("#btn-new-position").addEventListener("click", () => openPositionForm(null));
+
+  container.querySelectorAll("[data-add-position]").forEach((btn) =>
+    btn.addEventListener("click", () => openPositionForm(null, btn.dataset.addPosition))
+  );
 
   container.querySelectorAll("[data-edit]").forEach((btn) =>
     btn.addEventListener("click", () => {
