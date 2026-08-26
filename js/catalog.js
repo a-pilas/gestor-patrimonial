@@ -13,31 +13,37 @@ export function renderCatalog(container) {
   const entityName = (id) => data.entities.find((e) => e.id === id)?.name || "—";
   const editing = editingAssetId ? data.assets.find((a) => a.id === editingAssetId) : null;
 
-  container.innerHTML = `
-    <div class="cat-grid">
-      <section class="card">
-        <h3>Entidades</h3>
-        <form id="form-entity" class="inline-form">
-          <input name="name" placeholder="Nombre de la entidad (ej. MyInvestor)" required />
-          <button type="submit">Añadir</button>
-        </form>
-        <ul class="simple-list">
-          ${data.entities
-            .map((e) => `<li>${e.name} <button data-remove-entity="${e.id}" class="link-btn danger">eliminar</button></li>`)
-            .join("") || '<li class="muted">Sin entidades todavía</li>'}
-        </ul>
-      </section>
+  const sortedEntities = [...data.entities].sort((a, b) => a.name.localeCompare(b.name, "es"));
+  const sortedAssets = [...data.assets].sort((a, b) => {
+    const entityCmp = entityName(a.entityId).localeCompare(entityName(b.entityId), "es");
+    if (entityCmp !== 0) return entityCmp;
+    return a.name.localeCompare(b.name, "es");
+  });
 
-      <section class="card">
-        <h3>Activos</h3>
-        ${
-          data.entities.length === 0
-            ? `<p class="muted">Añade primero al menos una entidad (a la izquierda); cada activo pertenece a una entidad concreta.</p>`
-            : `<form id="form-asset" class="stacked-form">
+  container.innerHTML = `
+    <section class="card">
+      <h3>Entidades</h3>
+      <form id="form-entity" class="inline-form">
+        <input name="name" placeholder="Nombre de la entidad (ej. MyInvestor)" required />
+        <button type="submit">Añadir</button>
+      </form>
+      <ul class="entity-chips">
+        ${sortedEntities
+          .map((e) => `<li>${e.name} <button data-remove-entity="${e.id}" class="link-btn danger">×</button></li>`)
+          .join("") || '<li class="muted">Sin entidades todavía</li>'}
+      </ul>
+    </section>
+
+    <section class="card">
+      <h3>Activos</h3>
+      ${
+        data.entities.length === 0
+          ? `<p class="muted">Añade primero al menos una entidad (arriba); cada activo pertenece a una entidad concreta.</p>`
+          : `<form id="form-asset" class="stacked-form">
                 <label>Entidad
                   <select name="entityId" id="entity-select" required>
                     <option value="" ${!editing?.entityId ? "selected" : ""}>(sin entidad — patrimonio propio)</option>
-                    ${data.entities
+                    ${sortedEntities
                       .map((e) => `<option value="${e.id}" ${e.id === editing?.entityId ? "selected" : ""}>${e.name}</option>`)
                       .join("")}
                   </select>
@@ -68,14 +74,14 @@ export function renderCatalog(container) {
                   ${editing ? `<button type="button" id="cancel-edit-asset">Cancelar</button>` : ""}
                 </div>
               </form>`
-        }
+      }
 
-        <div class="table-wrap">
-          <table class="table">
-            <thead><tr><th>Nombre</th><th>Entidad</th><th>Clase</th><th>Subclase</th><th>ISIN</th><th>Riesgo</th><th></th></tr></thead>
-            <tbody>
-              ${data.assets
-                .map(
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Nombre</th><th>Entidad</th><th>Clase</th><th>Subclase</th><th>ISIN</th><th>Riesgo</th><th></th></tr></thead>
+          <tbody>
+            ${sortedAssets
+              .map(
                   (a) => `<tr>
                     <td>${a.name}</td>
                     <td>${
@@ -98,13 +104,12 @@ export function renderCatalog(container) {
                       <button data-remove-asset="${a.id}" class="link-btn danger">eliminar</button>
                     </td>
                   </tr>`
-                )
-                .join("") || '<tr><td colspan="7" class="muted">Sin activos todavía</td></tr>'}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </div>
+              )
+              .join("") || '<tr><td colspan="7" class="muted">Sin activos todavía</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </section>
   `;
 
   const classSelect = container.querySelector('select[name="class"]');

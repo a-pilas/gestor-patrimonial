@@ -65,9 +65,8 @@ function fmtPct1(n) {
 }
 
 function financialBreakdownTable() {
-  const { groups, otros, total } = financialBreakdownBySubclass();
-  const rows = [...groups];
-  if (otros > 0.005) rows.push({ label: "Otros (monetario, bonos...)", value: otros });
+  const { groups, total } = financialBreakdownBySubclass();
+  const rows = groups;
   return `
     <section class="card">
       <h3>Patrimonio financiero por tipo de producto</h3>

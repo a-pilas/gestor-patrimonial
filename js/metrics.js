@@ -206,31 +206,31 @@ function financialPositions() {
     .filter(({ asset }) => asset && asset.class !== "inmobiliario");
 }
 
+// "Fondos de inversión + ETF" también absorbe Monetario y Bono/Obligación,
+// que no tienen línea propia — así estas 6 categorías cubren siempre el
+// 100% del patrimonio financiero, sin necesidad de un cajón de "Otros".
 const SUBCLASS_GROUPS = [
   { label: "Liquidez en cuentas corrientes", subclasses: ["Cuenta corriente"] },
   { label: "Liquidez en cuentas de ahorro", subclasses: ["Cuenta remunerada"] },
   { label: "Liquidez en depósitos a plazo", subclasses: ["Depósito a plazo"] },
   { label: "Acciones", subclasses: ["Acción"] },
-  { label: "Fondos de inversión + ETF", subclasses: ["Fondo", "ETF"] },
+  { label: "Fondos de inversión + ETF", subclasses: ["Fondo", "ETF", "Monetario", "Bono/Obligación"] },
   { label: "Planes de pensiones", subclasses: ["Plan de pensiones"] },
 ];
 
 // Desglose del patrimonio financiero por tipo de producto (no por clase de
 // riesgo): cuentas corrientes, ahorro, depósitos, acciones, fondos+ETF y
-// planes de pensiones, más un resto ("Otros": monetario, bonos...) para que
-// la suma siempre cuadre con el total.
+// planes de pensiones.
 export function financialBreakdownBySubclass() {
   const groups = SUBCLASS_GROUPS.map((g) => ({ ...g, value: 0 }));
-  let otros = 0;
   let total = 0;
   for (const { p, asset } of financialPositions()) {
     const value = valueOfPosition(p);
     total += value;
     const group = groups.find((g) => g.subclasses.includes(asset.subclass));
     if (group) group.value += value;
-    else otros += value;
   }
-  return { groups, otros, total };
+  return { groups, total };
 }
 
 // Liquidez inmediata (cuenta corriente) vs. resto del patrimonio financiero

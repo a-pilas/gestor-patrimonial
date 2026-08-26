@@ -150,8 +150,16 @@ button:hover { background: var(--brand-light); }
 .simple-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .simple-list li { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--border); padding: 6px 0; }
 
-.cat-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
-@media (min-width: 900px) { .cat-grid { grid-template-columns: 320px 1fr; } }
+.entity-chips { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.entity-chips li {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--bg-card-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 6px 5px 12px;
+  font-size: 0.88rem;
+}
+.entity-chips .link-btn { font-size: 1rem; line-height: 1; padding: 2px 4px; }
 
 .table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
