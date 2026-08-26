@@ -1,4 +1,4 @@
-import { emptyData, uid } from "./model.js";
+import { emptyData, uid, REAL_ESTATE_SUBCLASSES } from "./model.js";
 
 const KEY = "gestorPatrimonial:data";
 
@@ -33,13 +33,18 @@ function load() {
     const parsed = JSON.parse(raw);
     const merged = withDefaults(parsed);
     // Los activos ahora pertenecen a una entidad fija. Si un activo antiguo no tenía
-    // entidad y solo hay una dada de alta, se le asigna automáticamente.
+    // entidad y solo hay una dada de alta, se le asigna automáticamente — salvo en
+    // inmuebles físicos, donde no tener entidad puede ser intencional (patrimonio
+    // propio sin custodio) y no un dato antiguo por migrar.
     const singleEntityId = merged.entities.length === 1 ? merged.entities[0].id : null;
-    merged.assets = (merged.assets || []).map((a) => ({
-      ...a,
-      subclass: SUBCLASS_MIGRATIONS[a.subclass] || a.subclass,
-      entityId: a.entityId || singleEntityId || null,
-    }));
+    merged.assets = (merged.assets || []).map((a) => {
+      const canSkipEntity = a.class === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(a.subclass);
+      return {
+        ...a,
+        subclass: SUBCLASS_MIGRATIONS[a.subclass] || a.subclass,
+        entityId: a.entityId || (canSkipEntity ? null : singleEntityId) || null,
+      };
+    });
     return merged;
   } catch (e) {
     console.error("Error cargando datos, se usa un estado vacío.", e);

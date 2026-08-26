@@ -35,9 +35,12 @@ export function renderCatalog(container) {
             ? `<p class="muted">Añade primero al menos una entidad (a la izquierda); cada activo pertenece a una entidad concreta.</p>`
             : `<form id="form-asset" class="stacked-form">
                 <label>Entidad
-                  <select name="entityId" required>${data.entities
-                    .map((e) => `<option value="${e.id}" ${e.id === editing?.entityId ? "selected" : ""}>${e.name}</option>`)
-                    .join("")}</select>
+                  <select name="entityId" id="entity-select" required>
+                    <option value="" ${!editing?.entityId ? "selected" : ""}>(sin entidad — patrimonio propio)</option>
+                    ${data.entities
+                      .map((e) => `<option value="${e.id}" ${e.id === editing?.entityId ? "selected" : ""}>${e.name}</option>`)
+                      .join("")}
+                  </select>
                 </label>
                 <label>Nombre <input name="name" required placeholder="Ej. Vanguard Global Stock Index" value="${editing?.name || ""}" /></label>
                 <label>Clase
@@ -74,7 +77,13 @@ export function renderCatalog(container) {
                 .map(
                   (a) => `<tr>
                     <td>${a.name}</td>
-                    <td>${a.entityId ? entityName(a.entityId) : '<span class="neg">sin asignar</span>'}</td>
+                    <td>${
+                      a.entityId
+                        ? entityName(a.entityId)
+                        : a.class === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(a.subclass)
+                        ? '<span class="muted">patrimonio propio</span>'
+                        : '<span class="neg">sin asignar</span>'
+                    }</td>
                     <td>${ASSET_CLASSES[a.class]?.label || a.class}</td>
                     <td>${a.subclass || "—"}${a.class === "mixto" && a.mixRvPct != null ? ` (${a.mixRvPct}% RV / ${100 - a.mixRvPct}% RF)` : ""}${a.class === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(a.subclass) ? ` <span class="muted">(compra ${fmtEUR(a.purchasePrice)}${a.rented ? " · en rentabilidad" : ""})</span>` : ""}</td>
                     <td>${a.isin || "—"}</td>
@@ -95,6 +104,7 @@ export function renderCatalog(container) {
 
   const classSelect = container.querySelector('select[name="class"]');
   const subclassSelect = container.querySelector('select[name="subclass"]');
+  const entitySelect = container.querySelector("#entity-select");
   const mixField = container.querySelector("#mix-field");
   const realEstateFields = container.querySelector("#real-estate-fields");
   if (classSelect && subclassSelect) {
@@ -108,8 +118,12 @@ export function renderCatalog(container) {
       mixField.style.display = classSelect.value === "mixto" ? "" : "none";
     }
     function refreshRealEstateFields() {
-      realEstateFields.style.display =
-        classSelect.value === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(subclassSelect.value) ? "" : "none";
+      // Un inmueble físico (no un fondo/REIT) puede no tener ninguna entidad
+      // custodia (p.ej. una vivienda sin hipoteca ni gestión de terceros):
+      // para el resto de clases sí es obligatorio elegir una entidad.
+      const isRealEstate = classSelect.value === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(subclassSelect.value);
+      realEstateFields.style.display = isRealEstate ? "" : "none";
+      entitySelect.required = !isRealEstate;
     }
     classSelect.addEventListener("change", () => {
       refreshSubclasses();
@@ -139,7 +153,7 @@ export function renderCatalog(container) {
     const fd = new FormData(ev.target);
     const isRealEstate = fd.get("class") === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(fd.get("subclass"));
     const payload = {
-      entityId: fd.get("entityId"),
+      entityId: fd.get("entityId") || null,
       name: fd.get("name").trim(),
       class: fd.get("class"),
       subclass: fd.get("subclass"),

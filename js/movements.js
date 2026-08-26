@@ -24,7 +24,7 @@ export function renderMovements(container) {
   const sorted = [...data.movements].sort((a, b) => (a.date < b.date ? 1 : -1));
   const assetById = (id) => data.assets.find((a) => a.id === id);
   const entityName = (id) => data.entities.find((e) => e.id === id)?.name || "—";
-  const assetLabel = (a) => `${a.name} — ${entityName(a.entityId)}`;
+  const assetLabel = (a) => (a.entityId ? `${a.name} — ${entityName(a.entityId)}` : a.name);
   const isUnitTraded = (assetId) => {
     const a = assetById(assetId);
     return a && UNIT_TRADED_SUBCLASSES.includes(a.subclass);
@@ -84,7 +84,7 @@ export function renderMovements(container) {
               .join("")}</select>
           </label>
           <label>Entidad
-            <select name="entityId" required>${data.entities
+            <select name="entityId" required><option value="">(sin entidad)</option>${data.entities
               .map((e) => `<option value="${e.id}" ${e.id === editing?.entityId ? "selected" : ""}>${e.name}</option>`)
               .join("")}</select>
           </label>
@@ -112,7 +112,7 @@ export function renderMovements(container) {
       function refreshEntityFromAsset() {
         const asset = assetById(assetSelect.value);
         if (asset) {
-          entitySelect.value = asset.entityId;
+          entitySelect.value = asset.entityId || "";
           entitySelect.disabled = true;
         } else {
           entitySelect.disabled = false;

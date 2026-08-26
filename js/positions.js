@@ -111,7 +111,7 @@ export function renderPositions(container) {
         const a = assetById(assetId);
         return a && a.class === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(a.subclass);
       };
-      const assetLabel = (a) => `${a.name} — ${entityName(a.entityId)}`;
+      const assetLabel = (a) => (a.entityId ? `${a.name} — ${entityName(a.entityId)}` : a.name);
       const firstAssetId = editing?.assetId || presetAssetId || data.assets[0].id;
       const initialValuations = editing?.valuations?.length ? editing.valuations : [{ source: "", value: "" }];
 
