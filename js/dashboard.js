@@ -13,7 +13,16 @@ import {
   financialBreakdownBySubclass,
   financialLiquidezVsResto,
   financialTotalsByEntity,
+  patrimonioConsolidado,
 } from "./metrics.js";
+
+// Paleta validada (validate_palette.js, modo dark, superficie --bg-card
+// #17281f): las 5 comprobaciones (banda de luminosidad, croma, separación
+// CVD, umbral de visión normal y contraste) pasan tanto para el par de la
+// barra como para el trío del anillo consolidado.
+const COLOR_LIQUIDEZ = "#4c9f70";
+const COLOR_INVERTIDO = "#3d7ab8";
+const COLOR_INMOBILIARIO = "#a85c32";
 
 function fmtEUR(n) {
   if (n == null || isNaN(n)) return "—";
@@ -92,21 +101,90 @@ function financialBreakdownTable() {
   `;
 }
 
-function liquidezVsRestoTable() {
+function legendRow(color, label, value, pct) {
+  return `<div class="legend-row">
+    <span class="legend-dot" style="background:${color}"></span>
+    <span class="legend-label">${label}</span>
+    <span class="legend-value">${fmtEUR(value)}</span>
+    <span class="legend-pct">${fmtPct1(pct)}</span>
+  </div>`;
+}
+
+// Barra apilada: mucho más fácil de leer de un vistazo que una tabla de 2
+// filas para una proporción tan simple — el ojo compara longitudes al
+// instante, sin tener que leer números.
+function liquidezVsRestoCard() {
   const { cuentaCorriente, resto, total } = financialLiquidezVsResto();
+  const pctCC = total ? (cuentaCorriente / total) * 100 : 0;
+  const pctResto = total ? (resto / total) * 100 : 0;
   return `
     <section class="card">
       <h3>Liquidez en cuenta corriente vs. resto</h3>
       <p class="muted">Excluye inmobiliario.</p>
-      <div class="table-wrap">
-        <table class="table">
-          <thead><tr><th></th><th>Importe</th><th>%</th></tr></thead>
-          <tbody>
-            <tr><td>Liquidez en cuentas corrientes</td><td>${fmtEUR(cuentaCorriente)}</td><td>${fmtPct1(total ? (cuentaCorriente / total) * 100 : 0)}</td></tr>
-            <tr><td>Resto invertido</td><td>${fmtEUR(resto)}</td><td>${fmtPct1(total ? (resto / total) * 100 : 0)}</td></tr>
-          </tbody>
-          <tfoot><tr><td><strong>Total</strong></td><td><strong>${fmtEUR(total)}</strong></td><td><strong>100.0 %</strong></td></tr></tfoot>
-        </table>
+      <div class="stackbar-total">${fmtEUR(total)}</div>
+      <div class="stackbar" role="img" aria-label="Cuenta corriente ${fmtPct1(pctCC)}, resto invertido ${fmtPct1(pctResto)}">
+        <div class="stackbar-seg" style="width:${pctCC}%; background:${COLOR_LIQUIDEZ}"></div>
+        <div class="stackbar-seg" style="width:${pctResto}%; background:${COLOR_INVERTIDO}"></div>
+      </div>
+      <div class="legend">
+        ${legendRow(COLOR_LIQUIDEZ, "Liquidez en cuentas corrientes", cuentaCorriente, pctCC)}
+        ${legendRow(COLOR_INVERTIDO, "Resto invertido", resto, pctResto)}
+      </div>
+    </section>
+  `;
+}
+
+// Anillo consolidado: liquidez / inversión financiera / inversión
+// inmobiliaria, sobre TODO el patrimonio (a diferencia de las otras tablas de
+// este bloque, que excluyen inmobiliario a propósito).
+function consolidatedDonutSvg(entries, total) {
+  const size = 180;
+  const r = 62;
+  const cx = size / 2;
+  const cy = size / 2;
+  const circumference = 2 * Math.PI * r;
+  const gap = 3; // separación visual entre segmentos, en unidades del perímetro
+
+  let offset = 0;
+  let segments = "";
+  const visible = entries.filter((e) => e.value > 0);
+
+  if (!total || !visible.length) {
+    return `<svg viewBox="0 0 ${size} ${size}" class="donut">
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#2a2a2a" stroke-width="24" />
+      <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle" class="donut-empty">Sin datos</text>
+    </svg>`;
+  }
+
+  for (const e of visible) {
+    const frac = e.value / total;
+    const len = Math.max(0, frac * circumference - gap);
+    segments += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${e.color}"
+      stroke-width="24" stroke-linecap="round" stroke-dasharray="${len} ${circumference - len}"
+      stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" />`;
+    offset += frac * circumference;
+  }
+
+  return `<svg viewBox="0 0 ${size} ${size}" class="donut">
+    ${segments}
+    <text x="${cx}" y="${cy - 4}" text-anchor="middle" class="donut-total" style="font-size:15px">${fmtEUR(total)}</text>
+    <text x="${cx}" y="${cy + 14}" text-anchor="middle" class="donut-label">Patrimonio total</text>
+  </svg>`;
+}
+
+function consolidatedDonutCard() {
+  const { liquidez, inversionFinanciera, inversionInmobiliaria, total } = patrimonioConsolidado();
+  const entries = [
+    { label: "Liquidez", value: liquidez, color: COLOR_LIQUIDEZ },
+    { label: "Inversión financiera", value: inversionFinanciera, color: COLOR_INVERTIDO },
+    { label: "Inversión inmobiliaria", value: inversionInmobiliaria, color: COLOR_INMOBILIARIO },
+  ];
+  return `
+    <section class="card card-donut">
+      <h3>Liquidez, inversión financiera e inmobiliaria</h3>
+      ${consolidatedDonutSvg(entries, total)}
+      <div class="legend">
+        ${entries.map((e) => legendRow(e.color, e.label, e.value, total ? (e.value / total) * 100 : 0)).join("")}
       </div>
     </section>
   `;
@@ -233,7 +311,12 @@ export function renderDashboard(container) {
     </div>
 
     ${financialBreakdownTable()}
-    ${liquidezVsRestoTable()}
+
+    <div class="dash-grid">
+      ${liquidezVsRestoCard()}
+      ${consolidatedDonutCard()}
+    </div>
+
     ${financialByEntityTable()}
   `;
 

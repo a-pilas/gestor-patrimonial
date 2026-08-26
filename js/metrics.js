@@ -246,6 +246,18 @@ export function financialLiquidezVsResto() {
   return { cuentaCorriente, resto: total - cuentaCorriente, total };
 }
 
+// Vista consolidada de TODO el patrimonio (financiero + inmobiliario) en solo
+// 3 bloques: liquidez (corriente+ahorro+depósito), inversión financiera (el
+// resto de lo financiero) e inversión inmobiliaria.
+export function patrimonioConsolidado() {
+  const { groups, total: totalFinanciero } = financialBreakdownBySubclass();
+  const liquidezLabels = ["Liquidez en cuentas corrientes", "Liquidez en cuentas de ahorro", "Liquidez en depósitos a plazo"];
+  const liquidez = groups.filter((g) => liquidezLabels.includes(g.label)).reduce((s, g) => s + g.value, 0);
+  const inversionFinanciera = totalFinanciero - liquidez;
+  const inversionInmobiliaria = totalsByClass().inmobiliario || 0;
+  return { liquidez, inversionFinanciera, inversionInmobiliaria, total: liquidez + inversionFinanciera + inversionInmobiliaria };
+}
+
 // Patrimonio financiero agrupado por entidad, de mayor a menor importe.
 export function financialTotalsByEntity() {
   const map = new Map();
