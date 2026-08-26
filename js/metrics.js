@@ -1,5 +1,5 @@
 import { ASSET_CLASSES, REAL_ESTATE_SUBCLASSES } from "./model.js";
-import { store, latestPositionsByAssetEntity, latestLiabilityPositions, assetById } from "./store.js";
+import { store, latestPositionsByAssetEntity, latestLiabilityPositions, assetById, entityById } from "./store.js";
 
 // El precio de compra de un inmueble físico cuenta como capital aportado a ese
 // activo, igual que una Compra normal — así no hace falta duplicar el dato
@@ -196,4 +196,71 @@ export function liabilitiesWithoutPosition() {
   const data = store.get();
   const idsWithPosition = new Set(data.liabilityPositions.map((p) => p.liabilityId));
   return data.liabilities.filter((l) => !idsWithPosition.has(l.id));
+}
+
+// --- Detalle de patrimonio financiero (excluye Inmobiliario en las tres) ---
+
+function financialPositions() {
+  return latestPositionsByAssetEntity()
+    .map((p) => ({ p, asset: assetById(p.assetId) }))
+    .filter(({ asset }) => asset && asset.class !== "inmobiliario");
+}
+
+const SUBCLASS_GROUPS = [
+  { label: "Liquidez en cuentas corrientes", subclasses: ["Cuenta corriente"] },
+  { label: "Liquidez en cuentas de ahorro", subclasses: ["Cuenta remunerada"] },
+  { label: "Liquidez en depósitos a plazo", subclasses: ["Depósito a plazo"] },
+  { label: "Acciones", subclasses: ["Acción"] },
+  { label: "Fondos de inversión + ETF", subclasses: ["Fondo", "ETF"] },
+  { label: "Planes de pensiones", subclasses: ["Plan de pensiones"] },
+];
+
+// Desglose del patrimonio financiero por tipo de producto (no por clase de
+// riesgo): cuentas corrientes, ahorro, depósitos, acciones, fondos+ETF y
+// planes de pensiones, más un resto ("Otros": monetario, bonos...) para que
+// la suma siempre cuadre con el total.
+export function financialBreakdownBySubclass() {
+  const groups = SUBCLASS_GROUPS.map((g) => ({ ...g, value: 0 }));
+  let otros = 0;
+  let total = 0;
+  for (const { p, asset } of financialPositions()) {
+    const value = valueOfPosition(p);
+    total += value;
+    const group = groups.find((g) => g.subclasses.includes(asset.subclass));
+    if (group) group.value += value;
+    else otros += value;
+  }
+  return { groups, otros, total };
+}
+
+// Liquidez inmediata (cuenta corriente) vs. resto del patrimonio financiero
+// (invertido o en otros productos de ahorro), dentro del patrimonio financiero.
+export function financialLiquidezVsResto() {
+  let cuentaCorriente = 0;
+  let total = 0;
+  for (const { p, asset } of financialPositions()) {
+    const value = valueOfPosition(p);
+    total += value;
+    if (asset.subclass === "Cuenta corriente") cuentaCorriente += value;
+  }
+  return { cuentaCorriente, resto: total - cuentaCorriente, total };
+}
+
+// Patrimonio financiero agrupado por entidad, de mayor a menor importe.
+export function financialTotalsByEntity() {
+  const map = new Map();
+  let total = 0;
+  for (const { p, asset } of financialPositions()) {
+    const value = valueOfPosition(p);
+    total += value;
+    const key = asset.entityId || "__sin_entidad__";
+    map.set(key, (map.get(key) || 0) + value);
+  }
+  const rows = [...map.entries()]
+    .map(([key, value]) => ({
+      name: key === "__sin_entidad__" ? "Sin entidad" : entityById(key)?.name || "—",
+      value,
+    }))
+    .sort((a, b) => b.value - a.value);
+  return { rows, total };
 }

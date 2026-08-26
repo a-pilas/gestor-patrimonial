@@ -60,6 +60,7 @@ export function renderCatalog(container) {
                 </label>
                 <div id="real-estate-fields" style="display:none">
                   <label>Precio de compra (€) <input name="purchasePrice" type="number" step="any" value="${editing?.purchasePrice ?? ""}" placeholder="Opcional" /></label>
+                  <label>Fecha de adquisición <input name="acquisitionDate" type="date" value="${editing?.acquisitionDate || ""}" placeholder="Opcional" /></label>
                   <label class="checkbox-label"><input name="rented" type="checkbox" ${editing?.rented ? "checked" : ""} /> En rentabilidad (alquilado)</label>
                 </div>
                 <div class="btn-row">
@@ -85,7 +86,11 @@ export function renderCatalog(container) {
                         : '<span class="neg">sin asignar</span>'
                     }</td>
                     <td>${ASSET_CLASSES[a.class]?.label || a.class}</td>
-                    <td>${a.subclass || "—"}${a.class === "mixto" && a.mixRvPct != null ? ` (${a.mixRvPct}% RV / ${100 - a.mixRvPct}% RF)` : ""}${a.class === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(a.subclass) ? ` <span class="muted">(compra ${fmtEUR(a.purchasePrice)}${a.rented ? " · en rentabilidad" : ""})</span>` : ""}</td>
+                    <td>${a.subclass || "—"}${a.class === "mixto" && a.mixRvPct != null ? ` (${a.mixRvPct}% RV / ${100 - a.mixRvPct}% RF)` : ""}${
+                      a.class === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(a.subclass)
+                        ? ` <span class="muted">(compra ${fmtEUR(a.purchasePrice)}${a.acquisitionDate ? ` el ${a.acquisitionDate}` : ""}${a.rented ? " · en rentabilidad" : ""})</span>`
+                        : ""
+                    }</td>
                     <td>${a.isin || "—"}</td>
                     <td>${a.riskScore ?? "—"}</td>
                     <td>
@@ -161,6 +166,7 @@ export function renderCatalog(container) {
       riskScore: fd.get("riskScore") ? Number(fd.get("riskScore")) : null,
       mixRvPct: fd.get("class") === "mixto" && fd.get("mixRvPct") ? Number(fd.get("mixRvPct")) : null,
       purchasePrice: isRealEstate && fd.get("purchasePrice") ? Number(fd.get("purchasePrice")) : null,
+      acquisitionDate: isRealEstate && fd.get("acquisitionDate") ? fd.get("acquisitionDate") : null,
       rented: isRealEstate ? fd.get("rented") === "on" : false,
     };
     if (editingAssetId) {

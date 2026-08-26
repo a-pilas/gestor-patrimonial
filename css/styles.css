@@ -158,6 +158,7 @@ button:hover { background: var(--brand-light); }
 .table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .table th, .table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
 .table th { color: var(--muted); font-weight: 600; }
+.table tfoot td { border-bottom: none; border-top: 2px solid var(--brand-light); padding-top: 10px; }
 
 .table-history { font-size: 0.95rem; }
 .table-history thead th {

@@ -10,6 +10,9 @@ import {
   assetsWithoutPosition,
   totalDeudaPendiente,
   patrimonioNeto,
+  financialBreakdownBySubclass,
+  financialLiquidezVsResto,
+  financialTotalsByEntity,
 } from "./metrics.js";
 
 function fmtEUR(n) {
@@ -55,6 +58,86 @@ function donutSvg(totals, total) {
     <text x="${cx}" y="${cy - 6}" text-anchor="middle" class="donut-total">${fmtEUR(total)}</text>
     <text x="${cx}" y="${cy + 16}" text-anchor="middle" class="donut-label">Patrimonio total</text>
   </svg>`;
+}
+
+function fmtPct1(n) {
+  return `${n.toFixed(1)} %`;
+}
+
+function financialBreakdownTable() {
+  const { groups, otros, total } = financialBreakdownBySubclass();
+  const rows = [...groups];
+  if (otros > 0.005) rows.push({ label: "Otros (monetario, bonos...)", value: otros });
+  return `
+    <section class="card">
+      <h3>Patrimonio financiero por tipo de producto</h3>
+      <p class="muted">Excluye inmobiliario.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Tipo</th><th>Importe</th><th>%</th></tr></thead>
+          <tbody>
+            ${rows
+              .map(
+                (r) => `<tr>
+                  <td>${r.label}</td>
+                  <td>${fmtEUR(r.value)}</td>
+                  <td>${fmtPct1(total ? (r.value / total) * 100 : 0)}</td>
+                </tr>`
+              )
+              .join("") || '<tr><td colspan="3" class="muted">Sin datos</td></tr>'}
+          </tbody>
+          <tfoot><tr><td><strong>Total</strong></td><td><strong>${fmtEUR(total)}</strong></td><td><strong>100.0 %</strong></td></tr></tfoot>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function liquidezVsRestoTable() {
+  const { cuentaCorriente, resto, total } = financialLiquidezVsResto();
+  return `
+    <section class="card">
+      <h3>Liquidez en cuenta corriente vs. resto</h3>
+      <p class="muted">Excluye inmobiliario.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th></th><th>Importe</th><th>%</th></tr></thead>
+          <tbody>
+            <tr><td>Liquidez en cuentas corrientes</td><td>${fmtEUR(cuentaCorriente)}</td><td>${fmtPct1(total ? (cuentaCorriente / total) * 100 : 0)}</td></tr>
+            <tr><td>Resto invertido</td><td>${fmtEUR(resto)}</td><td>${fmtPct1(total ? (resto / total) * 100 : 0)}</td></tr>
+          </tbody>
+          <tfoot><tr><td><strong>Total</strong></td><td><strong>${fmtEUR(total)}</strong></td><td><strong>100.0 %</strong></td></tr></tfoot>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function financialByEntityTable() {
+  const { rows, total } = financialTotalsByEntity();
+  return `
+    <section class="card">
+      <h3>Patrimonio financiero por entidad</h3>
+      <p class="muted">Excluye inmobiliario, ordenado de mayor a menor.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Entidad</th><th>Importe</th><th>%</th></tr></thead>
+          <tbody>
+            ${rows
+              .map(
+                (r) => `<tr>
+                  <td>${r.name}</td>
+                  <td>${fmtEUR(r.value)}</td>
+                  <td>${fmtPct1(total ? (r.value / total) * 100 : 0)}</td>
+                </tr>`
+              )
+              .join("") || '<tr><td colspan="3" class="muted">Sin datos</td></tr>'}
+          </tbody>
+          <tfoot><tr><td><strong>Total</strong></td><td><strong>${fmtEUR(total)}</strong></td><td><strong>100.0 %</strong></td></tr></tfoot>
+        </table>
+      </div>
+    </section>
+  `;
 }
 
 function riskBar(label, value, max = RISK_SCALE_MAX) {
@@ -149,6 +232,10 @@ export function renderDashboard(container) {
         ${riskBar("Combinado", risks.combinado)}
       </section>
     </div>
+
+    ${financialBreakdownTable()}
+    ${liquidezVsRestoTable()}
+    ${financialByEntityTable()}
   `;
 
   container.querySelector("#edit-benchmark")?.addEventListener("click", () => {
