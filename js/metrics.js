@@ -147,6 +147,31 @@ export function riskScores() {
   };
 }
 
+// Agrupa el score SRRI (1-7) de cada activo en 3 bandas de riesgo — más
+// granular que el RF/RV/Combinado de arriba (que promedia), ya que aquí ves
+// directamente qué % de tu cartera cae en cada nivel de riesgo. Cubre todo
+// el patrimonio (financiero + inmobiliario), igual que riskScores().
+const RISK_BANDS = [
+  { key: "conservador", label: "Conservador (1-2)", min: 1, max: 2 },
+  { key: "moderado", label: "Moderado (3-5)", min: 3, max: 5 },
+  { key: "decidido", label: "Decidido (6-7)", min: 6, max: 7 },
+];
+
+export function bandasDeRiesgo() {
+  const bands = RISK_BANDS.map((b) => ({ ...b, value: 0 }));
+  let total = 0;
+  for (const p of latestPositionsByAssetEntity()) {
+    const asset = assetById(p.assetId);
+    if (!asset) continue;
+    const value = valueOfPosition(p);
+    total += value;
+    const risk = asset.riskScore != null && asset.riskScore !== "" ? Number(asset.riskScore) : ASSET_CLASSES[asset.class].riskDefault;
+    const band = bands.find((b) => risk >= b.min && risk <= b.max);
+    if (band) band.value += value;
+  }
+  return { bands, total };
+}
+
 // Capital aportado neto de un activo concreto (precio de compra si es un
 // inmueble físico, más aportaciones/traspasos menos retiradas/ventas
 // registradas contra ese activo), para poder comparar "lo puesto" con el

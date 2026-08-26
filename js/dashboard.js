@@ -15,6 +15,7 @@ import {
   financialTotalsByEntity,
   patrimonioConsolidado,
   evolucionAnualPatrimonio,
+  bandasDeRiesgo,
 } from "./metrics.js";
 
 // Paleta validada (validate_palette.js, modo dark, superficie --bg-card
@@ -24,6 +25,16 @@ import {
 const COLOR_LIQUIDEZ = "#4c9f70";
 const COLOR_INVERTIDO = "#3d7ab8";
 const COLOR_INMOBILIARIO = "#a85c32";
+
+// Paleta de riesgo, validada por separado (verde-ámbar-rosa/rojo en vez del
+// dorado de --accent, que en modo oscuro queda demasiado claro y falla la
+// banda de luminosidad): las 5 comprobaciones pasan en ambos pares
+// adyacentes de la barra Conservador→Moderado→Decidido.
+const RISK_BAND_COLORS = {
+  conservador: "#4c9f70",
+  moderado: "#cc7a2e",
+  decidido: "#bf4560",
+};
 
 function fmtEUR(n) {
   if (n == null || isNaN(n)) return "—";
@@ -273,6 +284,27 @@ function riskBar(label, value, max = RISK_SCALE_MAX) {
   </div>`;
 }
 
+// Barra apilada de 3 segmentos: qué % de TODO el patrimonio (financiero +
+// inmobiliario) cae en cada banda de riesgo, más granular que el promedio
+// RF/RV/Combinado de la tarjeta de al lado.
+function riskBandsCard() {
+  const { bands, total } = bandasDeRiesgo();
+  const withPct = bands.map((b) => ({ ...b, pct: total ? (b.value / total) * 100 : 0 }));
+  return `
+    <section class="card">
+      <h3>Bandas de riesgo</h3>
+      <p class="muted">Agrupa el score SRRI (1-7) de cada activo.</p>
+      <div class="stackbar-total">${fmtEUR(total)}</div>
+      <div class="stackbar" role="img" aria-label="${withPct.map((b) => `${b.label} ${fmtPct1(b.pct)}`).join(", ")}">
+        ${withPct.map((b) => `<div class="stackbar-seg" style="width:${b.pct}%; background:${RISK_BAND_COLORS[b.key]}"></div>`).join("")}
+      </div>
+      <div class="legend">
+        ${withPct.map((b) => legendRow(RISK_BAND_COLORS[b.key], b.label, b.value, b.pct)).join("")}
+      </div>
+    </section>
+  `;
+}
+
 export function renderDashboard(container) {
   const data = store.get();
   const totals = totalsByClass();
@@ -354,6 +386,8 @@ export function renderDashboard(container) {
         ${riskBar("Renta variable", risks.rentaVariable)}
         ${riskBar("Combinado", risks.combinado)}
       </section>
+
+      ${riskBandsCard()}
     </div>
 
     ${evolutionChartCard()}
