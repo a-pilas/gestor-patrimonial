@@ -1,7 +1,17 @@
 import { ASSET_CLASSES } from "./model.js";
-import { store, latestPositionsByAssetEntity, assetById } from "./store.js";
+import { store, latestPositionsByAssetEntity, latestLiabilityPositions, assetById } from "./store.js";
 
-function valueOfPosition(p) {
+// Para inmuebles con varias fuentes de valoración (p.ej. dos tasaciones), el
+// valor es la media de esas fuentes menos el coeficiente de seguridad
+// configurado en Ajustes — recalculado siempre al vuelo, así que si cambias
+// el % de seguridad se refleja en todo (dashboard, posiciones...) sin tener
+// que reintroducir nada.
+export function valueOfPosition(p) {
+  if (p.valuations && p.valuations.length) {
+    const avg = p.valuations.reduce((s, v) => s + (Number(v.value) || 0), 0) / p.valuations.length;
+    const safetyPct = Number(store.get().meta.realEstateSafetyPct) || 0;
+    return avg * (1 - safetyPct / 100);
+  }
   return Number(p.value) || 0;
 }
 
@@ -151,4 +161,27 @@ export function fechaUltimaActualizacion() {
   const data = store.get();
   if (!data.positions.length) return null;
   return data.positions.reduce((max, p) => (p.date > max ? p.date : max), data.positions[0].date);
+}
+
+// Suma del último saldo pendiente conocido de cada pasivo (hipotecas, etc.).
+export function totalDeudaPendiente() {
+  return latestLiabilityPositions().reduce((s, p) => s + (Number(p.balance) || 0), 0);
+}
+
+// Patrimonio neto = activos (incluidos inmuebles) menos deuda pendiente.
+export function patrimonioNeto() {
+  return totalPatrimonio() - totalDeudaPendiente();
+}
+
+// Suma de las cuotas mensuales de todos los pasivos dados de alta.
+export function totalCuotaMensual() {
+  const data = store.get();
+  return data.liabilities.reduce((s, l) => s + (Number(l.monthlyPayment) || 0), 0);
+}
+
+// Pasivos dados de alta que todavía no tienen ningún saldo pendiente registrado.
+export function liabilitiesWithoutPosition() {
+  const data = store.get();
+  const idsWithPosition = new Set(data.liabilityPositions.map((p) => p.liabilityId));
+  return data.liabilities.filter((l) => !idsWithPosition.has(l.id));
 }

@@ -8,6 +8,8 @@ import {
   riskScores,
   fechaUltimaActualizacion,
   assetsWithoutPosition,
+  totalDeudaPendiente,
+  patrimonioNeto,
 } from "./metrics.js";
 
 function fmtEUR(n) {
@@ -76,6 +78,8 @@ export function renderDashboard(container) {
   const risks = riskScores();
   const lastUpdate = fechaUltimaActualizacion();
   const missing = assetsWithoutPosition();
+  const deuda = totalDeudaPendiente();
+  const neto = patrimonioNeto();
 
   const legend = Object.entries(ASSET_CLASSES)
     .map(([key, cfg]) => {
@@ -113,6 +117,12 @@ export function renderDashboard(container) {
         <div class="kpi-row"><span>Aportado neto</span><strong>${fmtEUR(aportado)}</strong></div>
         <div class="kpi-row"><span>Plusvalía acumulada</span><strong class="${plusvalia >= 0 ? "pos" : "neg"}">${missing.length ? "—" : fmtEUR(plusvalia)}</strong></div>
         ${missing.length ? `<p class="muted">No se calcula hasta que todos los activos tengan una posición con su valor actual.</p>` : ""}
+        ${
+          deuda
+            ? `<div class="kpi-row"><span>Deudas</span><strong class="neg">−${fmtEUR(deuda)}</strong></div>
+               <div class="kpi-row"><span>Patrimonio neto</span><strong>${fmtEUR(neto)}</strong></div>`
+            : ""
+        }
         <p class="muted">Última actualización de posiciones: ${lastUpdate || "sin datos"}</p>
       </section>
 

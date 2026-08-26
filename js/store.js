@@ -14,12 +14,24 @@ const SUBCLASS_MIGRATIONS = {
 
 let data = load();
 
+// Fusiona un JSON cargado (import, backup, o el guardado en localStorage) con la
+// plantilla vacía, incluyendo un merge en profundidad de "meta" para que a los
+// backups antiguos no les falten claves nuevas (p.ej. el coeficiente de
+// seguridad de inmuebles) y les queden con su valor por defecto.
+function withDefaults(parsed) {
+  const merged = { ...emptyData(), ...parsed };
+  merged.meta = { ...emptyData().meta, ...(parsed.meta || {}) };
+  merged.liabilities = parsed.liabilities || [];
+  merged.liabilityPositions = parsed.liabilityPositions || [];
+  return merged;
+}
+
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return emptyData();
     const parsed = JSON.parse(raw);
-    const merged = { ...emptyData(), ...parsed };
+    const merged = withDefaults(parsed);
     // Los activos ahora pertenecen a una entidad fija. Si un activo antiguo no tenía
     // entidad y solo hay una dada de alta, se le asigna automáticamente.
     const singleEntityId = merged.entities.length === 1 ? merged.entities[0].id : null;
@@ -124,17 +136,57 @@ export const store = {
     persist();
   },
 
+  // --- Pasivos (deudas/hipotecas) ---
+  addLiability(liability) {
+    const l = { id: uid(), monthlyPayment: null, notes: "", ...liability };
+    data.liabilities.push(l);
+    persist();
+    return l;
+  },
+  updateLiability(id, patch) {
+    data.liabilities = data.liabilities.map((l) => (l.id === id ? { ...l, ...patch } : l));
+    persist();
+  },
+  removeLiability(id) {
+    data.liabilities = data.liabilities.filter((l) => l.id !== id);
+    persist();
+  },
+
+  // --- Saldo pendiente de pasivos (snapshots) ---
+  addLiabilityPosition(pos) {
+    const existing = data.liabilityPositions.find((p) => p.liabilityId === pos.liabilityId && p.date === pos.date);
+    if (existing) {
+      Object.assign(existing, pos);
+      persist();
+      return existing;
+    }
+    const p = { id: uid(), ...pos };
+    data.liabilityPositions.push(p);
+    persist();
+    return p;
+  },
+  updateLiabilityPosition(id, patch) {
+    const existing = data.liabilityPositions.find((p) => p.id === id);
+    if (existing) Object.assign(existing, patch);
+    persist();
+    return existing;
+  },
+  removeLiabilityPosition(id) {
+    data.liabilityPositions = data.liabilityPositions.filter((p) => p.id !== id);
+    persist();
+  },
+
   // --- Import / Export ---
   exportJson() {
     return JSON.stringify(data, null, 2);
   },
   importJson(json) {
     const parsed = JSON.parse(json);
-    data = { ...emptyData(), ...parsed };
+    data = withDefaults(parsed);
     persist();
   },
   replaceAll(newData) {
-    data = { ...emptyData(), ...newData };
+    data = withDefaults(newData);
     persist();
   },
 };
@@ -159,4 +211,18 @@ export function assetById(id) {
 
 export function entityById(id) {
   return data.entities.find((e) => e.id === id);
+}
+
+// Último saldo pendiente conocido de cada pasivo, sin importar la fecha.
+export function latestLiabilityPositions() {
+  const map = new Map();
+  for (const p of data.liabilityPositions) {
+    const prev = map.get(p.liabilityId);
+    if (!prev || p.date >= prev.date) map.set(p.liabilityId, p);
+  }
+  return [...map.values()];
+}
+
+export function liabilityById(id) {
+  return data.liabilities.find((l) => l.id === id);
 }

@@ -25,6 +25,13 @@ export const SUBCLASSES = {
 // para las que además del valor total se puede indicar unidades y valor liquidativo.
 export const UNIT_TRADED_SUBCLASSES = ["Fondo", "ETF", "Acción", "Plan de pensiones"];
 
+// Inmuebles "físicos" (no un fondo/REIT cotizado): admiten varias fuentes de
+// valoración por posición (p.ej. dos tasaciones) que se promedian, y un
+// coeficiente de seguridad de minusvaloración prudente configurable.
+export const REAL_ESTATE_SUBCLASSES = ["Vivienda", "Local/Oficina"];
+
+export const DEFAULT_REAL_ESTATE_SAFETY_PCT = 10;
+
 export const MOVEMENT_TYPES = {
   aportacion: "Aportación",
   retirada: "Retirada",
@@ -44,6 +51,7 @@ export function emptyData() {
     meta: {
       benchmarkName: "Morningstar Global 60/40",
       benchmarkYtdPct: null,
+      realEstateSafetyPct: DEFAULT_REAL_ESTATE_SAFETY_PCT,
       version: 1,
     },
     entities: [],
@@ -51,5 +59,7 @@ export function emptyData() {
     positions: [],
     movements: [],
     decisions: [],
+    liabilities: [],
+    liabilityPositions: [],
   };
 }

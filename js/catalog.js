@@ -1,5 +1,10 @@
-import { ASSET_CLASSES, SUBCLASSES, RISK_SCALE_MAX } from "./model.js";
+import { ASSET_CLASSES, SUBCLASSES, RISK_SCALE_MAX, REAL_ESTATE_SUBCLASSES } from "./model.js";
 import { store } from "./store.js";
+
+function fmtEUR(n) {
+  if (n == null || isNaN(n)) return "—";
+  return Number(n).toLocaleString("es-ES", { style: "currency", currency: "EUR" });
+}
 
 let editingAssetId = null;
 
@@ -50,6 +55,10 @@ export function renderCatalog(container) {
                 <label id="mix-field" style="display:none">% en Renta variable (el resto se asume Renta fija)
                   <input name="mixRvPct" type="number" min="0" max="100" step="1" value="${editing?.mixRvPct ?? ""}" placeholder="Ej. 60 (para 60% RV / 40% RF)" />
                 </label>
+                <div id="real-estate-fields" style="display:none">
+                  <label>Precio de compra (€) <input name="purchasePrice" type="number" step="any" value="${editing?.purchasePrice ?? ""}" placeholder="Opcional" /></label>
+                  <label class="checkbox-label"><input name="rented" type="checkbox" ${editing?.rented ? "checked" : ""} /> En rentabilidad (alquilado)</label>
+                </div>
                 <div class="btn-row">
                   <button type="submit">${editing ? "Guardar cambios" : "Añadir activo"}</button>
                   ${editing ? `<button type="button" id="cancel-edit-asset">Cancelar</button>` : ""}
@@ -67,7 +76,7 @@ export function renderCatalog(container) {
                     <td>${a.name}</td>
                     <td>${a.entityId ? entityName(a.entityId) : '<span class="neg">sin asignar</span>'}</td>
                     <td>${ASSET_CLASSES[a.class]?.label || a.class}</td>
-                    <td>${a.subclass || "—"}${a.class === "mixto" && a.mixRvPct != null ? ` (${a.mixRvPct}% RV / ${100 - a.mixRvPct}% RF)` : ""}</td>
+                    <td>${a.subclass || "—"}${a.class === "mixto" && a.mixRvPct != null ? ` (${a.mixRvPct}% RV / ${100 - a.mixRvPct}% RF)` : ""}${a.class === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(a.subclass) ? ` <span class="muted">(compra ${fmtEUR(a.purchasePrice)}${a.rented ? " · en rentabilidad" : ""})</span>` : ""}</td>
                     <td>${a.isin || "—"}</td>
                     <td>${a.riskScore ?? "—"}</td>
                     <td>
@@ -87,6 +96,7 @@ export function renderCatalog(container) {
   const classSelect = container.querySelector('select[name="class"]');
   const subclassSelect = container.querySelector('select[name="subclass"]');
   const mixField = container.querySelector("#mix-field");
+  const realEstateFields = container.querySelector("#real-estate-fields");
   if (classSelect && subclassSelect) {
     function refreshSubclasses() {
       const opts = SUBCLASSES[classSelect.value] || [];
@@ -97,10 +107,16 @@ export function renderCatalog(container) {
     function refreshMixField() {
       mixField.style.display = classSelect.value === "mixto" ? "" : "none";
     }
+    function refreshRealEstateFields() {
+      realEstateFields.style.display =
+        classSelect.value === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(subclassSelect.value) ? "" : "none";
+    }
     classSelect.addEventListener("change", () => {
       refreshSubclasses();
       refreshMixField();
+      refreshRealEstateFields();
     });
+    subclassSelect.addEventListener("change", refreshRealEstateFields);
     if (!editing) refreshSubclasses();
     else {
       // Aseguramos que las opciones de subclase correspondan a la clase ya seleccionada al editar
@@ -108,6 +124,7 @@ export function renderCatalog(container) {
       refreshSubclasses();
     }
     refreshMixField();
+    refreshRealEstateFields();
   }
 
   container.querySelector("#form-entity").addEventListener("submit", (ev) => {
@@ -120,6 +137,7 @@ export function renderCatalog(container) {
   container.querySelector("#form-asset")?.addEventListener("submit", (ev) => {
     ev.preventDefault();
     const fd = new FormData(ev.target);
+    const isRealEstate = fd.get("class") === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(fd.get("subclass"));
     const payload = {
       entityId: fd.get("entityId"),
       name: fd.get("name").trim(),
@@ -128,6 +146,8 @@ export function renderCatalog(container) {
       isin: fd.get("isin").trim(),
       riskScore: fd.get("riskScore") ? Number(fd.get("riskScore")) : null,
       mixRvPct: fd.get("class") === "mixto" && fd.get("mixRvPct") ? Number(fd.get("mixRvPct")) : null,
+      purchasePrice: isRealEstate && fd.get("purchasePrice") ? Number(fd.get("purchasePrice")) : null,
+      rented: isRealEstate ? fd.get("rented") === "on" : false,
     };
     if (editingAssetId) {
       store.updateAsset(editingAssetId, payload);

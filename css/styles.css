@@ -114,6 +114,11 @@ body {
 
 .stacked-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
 .stacked-form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+.checkbox-label { flex-direction: row !important; align-items: center; gap: 8px !important; }
+.checkbox-label input { width: auto; }
+
+.valuation-row { align-items: center; margin-bottom: 8px; }
+.valuation-row input { flex: 1; min-width: 0; }
 
 input, select, button {
   background: #142621;

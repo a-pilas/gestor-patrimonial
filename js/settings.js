@@ -25,6 +25,15 @@ export function renderSettings(container) {
     </section>
 
     <section class="card">
+      <h3>Inmuebles</h3>
+      <label>Coeficiente de seguridad (%) — minusvaloración prudente sobre la media de las tasaciones
+        <input id="real-estate-safety-pct" type="number" min="0" max="100" step="1" value="${data.meta.realEstateSafetyPct}" />
+      </label>
+      <p class="muted">Se aplica a todas las posiciones de inmuebles con varias fuentes de valoración, en todas las pantallas, al instante.</p>
+      <button id="save-safety-pct">Guardar</button>
+    </section>
+
+    <section class="card">
       <h3>Seguridad</h3>
       <p class="muted">Candado de acceso a esta app en este navegador (te lo pide cada vez que la abres). No es una protección real de tus datos —siguen solo en este dispositivo— sino un filtro sencillo para que nadie la abra sin más.</p>
       <div class="btn-row">
@@ -66,6 +75,16 @@ export function renderSettings(container) {
   container.querySelector("#save-benchmark-name").addEventListener("click", () => {
     const name = container.querySelector("#benchmark-name").value.trim();
     if (name) store.updateMeta({ benchmarkName: name });
+    alert("Guardado.");
+  });
+
+  container.querySelector("#save-safety-pct").addEventListener("click", () => {
+    const pct = Number(container.querySelector("#real-estate-safety-pct").value);
+    if (isNaN(pct) || pct < 0 || pct > 100) {
+      alert("Introduce un porcentaje entre 0 y 100.");
+      return;
+    }
+    store.updateMeta({ realEstateSafetyPct: pct });
     alert("Guardado.");
   });
 
