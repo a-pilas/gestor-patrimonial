@@ -99,6 +99,28 @@ body {
 }
 .stackbar-seg { height: 100%; min-width: 0; transition: width 0.2s ease; }
 
+.evo-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 190px;
+  padding-top: 34px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.evo-bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1 0 52px;
+  height: 100%;
+}
+.evo-bar-value { font-size: 0.72rem; white-space: nowrap; margin-bottom: 2px; }
+.evo-bar-yoy { font-size: 0.68rem; margin-bottom: 4px; }
+.evo-bar { width: 100%; max-width: 36px; border-radius: 6px 6px 0 0; }
+.evo-bar-year { font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
+
 .legend { width: 100%; display: flex; flex-direction: column; gap: 6px; }
 .legend-row { display: grid; grid-template-columns: 14px 1fr auto auto; align-items: center; gap: 8px; font-size: 0.9rem; }
 .legend-dot { width: 12px; height: 12px; border-radius: 50%; }

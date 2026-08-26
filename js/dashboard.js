@@ -14,6 +14,7 @@ import {
   financialLiquidezVsResto,
   financialTotalsByEntity,
   patrimonioConsolidado,
+  evolucionAnualPatrimonio,
 } from "./metrics.js";
 
 // Paleta validada (validate_palette.js, modo dark, superficie --bg-card
@@ -190,6 +191,51 @@ function consolidatedDonutCard() {
   `;
 }
 
+// Evolución anual del patrimonio total (financiero + inmobiliario), como
+// gráfico de barras — una barra por año con su importe encima y la variación
+// interanual debajo, para leer de un vistazo tanto el nivel como el ritmo de
+// crecimiento. El último año (el actual) se resalta en un color distinto.
+function evolutionChartCard() {
+  const years = evolucionAnualPatrimonio();
+  if (years.length < 2) {
+    return `
+      <section class="card">
+        <h3>Evolución del patrimonio</h3>
+        <p class="muted">Necesitas posiciones de al menos dos años distintos para ver la evolución histórica.</p>
+      </section>
+    `;
+  }
+
+  const maxValue = Math.max(...years.map((y) => y.total), 1);
+  const currentYear = new Date().getFullYear();
+
+  const bars = years
+    .map((y) => {
+      const pct = Math.max(2, (y.total / maxValue) * 100);
+      const isCurrent = y.year === currentYear;
+      const yoy =
+        y.yoyPct == null
+          ? `<span class="evo-bar-yoy muted">—</span>`
+          : `<span class="evo-bar-yoy ${y.yoyPct >= 0 ? "pos" : "neg"}">${y.yoyPct >= 0 ? "+" : ""}${y.yoyPct.toFixed(1)}%</span>`;
+      return `
+        <div class="evo-bar-col">
+          <div class="evo-bar-value">${fmtEUR(y.total)}</div>
+          ${yoy}
+          <div class="evo-bar" style="height:${pct}%; background:${isCurrent ? "var(--accent)" : "var(--brand-light)"}"></div>
+          <div class="evo-bar-year">${y.year}</div>
+        </div>
+      `;
+    })
+    .join("");
+
+  return `
+    <section class="card">
+      <h3>Evolución del patrimonio</h3>
+      <div class="evo-chart">${bars}</div>
+    </section>
+  `;
+}
+
 function financialByEntityTable() {
   const { rows, total } = financialTotalsByEntity();
   return `
@@ -309,6 +355,8 @@ export function renderDashboard(container) {
         ${riskBar("Combinado", risks.combinado)}
       </section>
     </div>
+
+    ${evolutionChartCard()}
 
     ${financialBreakdownTable()}
 

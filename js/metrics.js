@@ -276,3 +276,41 @@ export function financialTotalsByEntity() {
     .sort((a, b) => b.value - a.value);
   return { rows, total };
 }
+
+// Patrimonio total (financiero + inmobiliario) al cierre de cada año, desde
+// el primer año con alguna posición registrada hasta hoy. Para el año en
+// curso usa la última posición conocida (no proyecta a 31/12), igual que el
+// resto del dashboard. Cada año usa, por (entidad, activo), la última
+// posición conocida en o antes de su 31 de diciembre — el mismo criterio que
+// ya usa rentabilidadYtdPct() para "valor a inicio de año", generalizado a
+// todo el histórico en vez de solo al año pasado.
+export function evolucionAnualPatrimonio() {
+  const data = store.get();
+  if (!data.positions.length) return [];
+
+  const firstYear = Math.min(...data.positions.map((p) => Number(p.date.slice(0, 4))));
+  const currentYear = new Date().getFullYear();
+
+  const years = [];
+  for (let year = firstYear; year <= currentYear; year++) {
+    const cutoff = `${year}-12-31`;
+    const map = new Map();
+    for (const p of data.positions) {
+      if (p.date > cutoff) continue;
+      const key = p.entityId + "|" + p.assetId;
+      const prev = map.get(key);
+      if (!prev || p.date >= prev.date) map.set(key, p);
+    }
+    let total = 0;
+    for (const p of map.values()) {
+      if (!assetById(p.assetId)) continue;
+      total += valueOfPosition(p);
+    }
+    years.push({ year, total });
+  }
+
+  return years.map((y, i) => ({
+    ...y,
+    yoyPct: i === 0 || !years[i - 1].total ? null : ((y.total - years[i - 1].total) / years[i - 1].total) * 100,
+  }));
+}
