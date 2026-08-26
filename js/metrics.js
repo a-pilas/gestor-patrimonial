@@ -33,15 +33,19 @@ export function totalPatrimonio() {
 }
 
 // Un traspaso se registra siempre en el lado que RECIBE el dinero, así que cuenta
-// como capital que financia el patrimonio actual, igual que una aportación.
-// (Si algún día mueves dinero entre dos activos que YA están en la app, no hace
-// falta registrar un traspaso: basta con actualizar el valor de ambas posiciones).
+// como capital que financia el patrimonio actual, igual que una aportación. Una
+// Compra cuenta igual: si no había una Aportación previa registrada para ese
+// dinero, la Compra ES el momento en que ese capital entra en la app.
+// (Si algún día mueves dinero entre dos activos que YA están en la app —incluida
+// efectivo en una cuenta ya trackeada—, no hace falta registrar un movimiento:
+// basta con actualizar el valor de las posiciones afectadas, para no contar ese
+// dinero dos veces).
 export function totalAportadoNeto() {
   const data = store.get();
   let total = 0;
   for (const m of data.movements) {
-    if (m.type === "aportacion" || m.type === "traspaso") total += Number(m.amount) || 0;
-    if (m.type === "retirada") total -= Number(m.amount) || 0;
+    if (m.type === "aportacion" || m.type === "traspaso" || m.type === "compra") total += Number(m.amount) || 0;
+    if (m.type === "retirada" || m.type === "venta") total -= Number(m.amount) || 0;
   }
   return total;
 }
@@ -74,8 +78,8 @@ export function rentabilidadYtdPct() {
   let flujosYtd = 0;
   for (const m of data.movements) {
     if (m.date < startOfYear) continue;
-    if (m.type === "aportacion" || m.type === "traspaso") flujosYtd += Number(m.amount) || 0;
-    if (m.type === "retirada") flujosYtd -= Number(m.amount) || 0;
+    if (m.type === "aportacion" || m.type === "traspaso" || m.type === "compra") flujosYtd += Number(m.amount) || 0;
+    if (m.type === "retirada" || m.type === "venta") flujosYtd -= Number(m.amount) || 0;
   }
 
   const pct = ((valorActual - valorInicioAño - flujosYtd) / valorInicioAño) * 100;
