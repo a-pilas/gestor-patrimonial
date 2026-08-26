@@ -1,5 +1,15 @@
-import { ASSET_CLASSES } from "./model.js";
+import { ASSET_CLASSES, REAL_ESTATE_SUBCLASSES } from "./model.js";
 import { store, latestPositionsByAssetEntity, latestLiabilityPositions, assetById } from "./store.js";
+
+// El precio de compra de un inmueble físico cuenta como capital aportado a ese
+// activo, igual que una Compra normal — así no hace falta duplicar el dato
+// registrando además un movimiento con el mismo importe.
+function purchasePriceAsAportado(asset) {
+  if (asset && asset.class === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(asset.subclass)) {
+    return Number(asset.purchasePrice) || 0;
+  }
+  return 0;
+}
 
 // Para inmuebles con varias fuentes de valoración (p.ej. dos tasaciones), el
 // valor es la media de esas fuentes menos el coeficiente de seguridad
@@ -53,6 +63,7 @@ export function totalPatrimonio() {
 export function totalAportadoNeto() {
   const data = store.get();
   let total = 0;
+  for (const a of data.assets) total += purchasePriceAsAportado(a);
   for (const m of data.movements) {
     if (m.type === "aportacion" || m.type === "traspaso" || m.type === "compra") total += Number(m.amount) || 0;
     if (m.type === "retirada" || m.type === "venta") total -= Number(m.amount) || 0;
@@ -136,12 +147,13 @@ export function riskScores() {
   };
 }
 
-// Capital aportado neto de un activo concreto (suma de aportaciones/traspasos
-// menos retiradas/ventas registradas contra ese activo), para poder comparar
-// "lo puesto" con el valor actual en la pantalla de Posiciones.
+// Capital aportado neto de un activo concreto (precio de compra si es un
+// inmueble físico, más aportaciones/traspasos menos retiradas/ventas
+// registradas contra ese activo), para poder comparar "lo puesto" con el
+// valor actual en la pantalla de Posiciones.
 export function aportadoNetoPorActivo(assetId) {
   const data = store.get();
-  let total = 0;
+  let total = purchasePriceAsAportado(assetById(assetId));
   for (const m of data.movements) {
     if (m.assetId !== assetId) continue;
     if (m.type === "aportacion" || m.type === "traspaso" || m.type === "compra") total += Number(m.amount) || 0;
