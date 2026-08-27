@@ -16,7 +16,11 @@ import {
   patrimonioConsolidado,
   evolucionAnualPatrimonio,
   bandasDeRiesgo,
+  plusvaliaRealizadaVsLatente,
+  evolucionMensualLiquidez,
 } from "./metrics.js";
+
+const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
 // Paleta validada (validate_palette.js, modo dark, superficie --bg-card
 // #17281f): las 5 comprobaciones (banda de luminosidad, croma, separación
@@ -247,6 +251,70 @@ function evolutionChartCard() {
   `;
 }
 
+// Plusvalía realizada (activos ya vendidos/retirados del todo) vs. latente
+// (lo que sigues manteniendo). Con KPIs en vez de barra apilada porque
+// cualquiera de las dos puede ser negativa (una pérdida), y una barra
+// apilada solo tiene sentido con magnitudes positivas.
+function plusvaliaCard() {
+  const { realizada, latente, total } = plusvaliaRealizadaVsLatente();
+  return `
+    <section class="card">
+      <h3>Plusvalía realizada vs. latente</h3>
+      <p class="muted">Realizada: activos ya vendidos o retirados por completo. Latente: lo que sigues manteniendo. Un activo recién dado de alta sin posición ni venta registrada todavía no cuenta en ninguna de las dos.</p>
+      <div class="kpi-row"><span>Latente</span><strong class="${latente >= 0 ? "pos" : "neg"}">${fmtEUR(latente)}</strong></div>
+      <div class="kpi-row"><span>Realizada</span><strong class="${realizada >= 0 ? "pos" : "neg"}">${fmtEUR(realizada)}</strong></div>
+      <div class="kpi-row"><span>Total</span><strong class="${total >= 0 ? "pos" : "neg"}">${fmtEUR(total)}</strong></div>
+    </section>
+  `;
+}
+
+// Colchón de liquidez mes a mes (cuentas corrientes + ahorro + depósitos),
+// mismo formato de gráfico de barras que la evolución anual del patrimonio.
+function liquidityEvolutionCard() {
+  const points = evolucionMensualLiquidez();
+  if (points.length < 2) {
+    return `
+      <section class="card">
+        <h3>Colchón de liquidez en el tiempo</h3>
+        <p class="muted">Necesitas posiciones de liquidez de al menos dos meses distintos para ver la evolución.</p>
+      </section>
+    `;
+  }
+
+  const maxValue = Math.max(...points.map((pt) => pt.total), 1);
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+  const bars = points
+    .map((pt) => {
+      const pct = Math.max(2, (pt.total / maxValue) * 100);
+      const isCurrent = pt.month === currentMonth;
+      const [y, m] = pt.month.split("-");
+      const label = `${MESES_CORTOS[Number(m) - 1]} ${y.slice(2)}`;
+      const mom =
+        pt.momPct == null
+          ? `<span class="evo-bar-yoy muted">—</span>`
+          : `<span class="evo-bar-yoy ${pt.momPct >= 0 ? "pos" : "neg"}">${pt.momPct >= 0 ? "+" : ""}${pt.momPct.toFixed(1)}%</span>`;
+      return `
+        <div class="evo-bar-col">
+          <div class="evo-bar-value">${fmtEUR(pt.total)}</div>
+          ${mom}
+          <div class="evo-bar" style="height:${pct}%; background:${isCurrent ? "var(--accent)" : COLOR_LIQUIDEZ}"></div>
+          <div class="evo-bar-year">${label}</div>
+        </div>
+      `;
+    })
+    .join("");
+
+  return `
+    <section class="card">
+      <h3>Colchón de liquidez en el tiempo</h3>
+      <p class="muted">Cuentas corrientes + ahorro + depósitos, mes a mes.</p>
+      <div class="evo-chart">${bars}</div>
+    </section>
+  `;
+}
+
 function financialByEntityTable() {
   const { rows, total } = financialTotalsByEntity();
   return `
@@ -377,7 +445,7 @@ export function renderDashboard(container) {
             <button id="edit-benchmark" class="link-btn">editar</button>
           </div>
         </div>
-        <p class="muted">Cálculo simplificado a partir de las últimas posiciones y flujos del año. Se refinará en próximas fases (TWR).</p>
+        <p class="muted">TWR (Time-Weighted Return): encadena un periodo por cada actualización de posiciones, para que las aportaciones no distorsionen la rentabilidad de mercado.</p>
       </section>
 
       <section class="card card-risk">
@@ -393,12 +461,16 @@ export function renderDashboard(container) {
 
     ${evolutionChartCard()}
 
+    ${plusvaliaCard()}
+
     ${financialBreakdownTable()}
 
     <div class="dash-grid">
       ${liquidezVsRestoCard()}
       ${consolidatedDonutCard()}
     </div>
+
+    ${liquidityEvolutionCard()}
 
     ${financialByEntityTable()}
   `;

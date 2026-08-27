@@ -71,40 +71,98 @@ export function totalAportadoNeto() {
   return total;
 }
 
-// Rentabilidad YTD simplificada (método Dietz simple):
-// (valorActual - valorInicioAño - flujosNetosYtd) / valorInicioAño
+// Valor total (financiero + inmobiliario) en o antes de una fecha de corte
+// dada, por (entidad, activo) — la última posición conocida hasta ese punto.
+function valorTotalHasta(cutoff) {
+  const data = store.get();
+  const map = new Map();
+  for (const p of data.positions) {
+    if (p.date > cutoff) continue;
+    const key = p.entityId + "|" + p.assetId;
+    const prev = map.get(key);
+    if (!prev || p.date >= prev.date) map.set(key, p);
+  }
+  let total = 0;
+  for (const p of map.values()) {
+    if (!assetById(p.assetId)) continue;
+    total += valueOfPosition(p);
+  }
+  return total;
+}
+
+// Flujo neto de capital dentro de un rango de fechas [desde, hasta] (ambos
+// incluidos, formato YYYY-MM-DD): Movimientos de aportación/traspaso/compra
+// suman, retirada/venta restan — igual que en el resto de la app — más el
+// precio de compra de cualquier inmueble cuya fecha de adquisición caiga en
+// ese rango (que no es un Movimiento, así que hay que sumarlo aparte).
+function flujoNetoEntre(desde, hasta) {
+  const data = store.get();
+  let flujo = 0;
+  for (const m of data.movements) {
+    if (m.date < desde || m.date > hasta) continue;
+    if (m.type === "aportacion" || m.type === "traspaso" || m.type === "compra") flujo += Number(m.amount) || 0;
+    if (m.type === "retirada" || m.type === "venta") flujo -= Number(m.amount) || 0;
+  }
+  for (const a of data.assets) {
+    if (a.acquisitionDate && a.acquisitionDate >= desde && a.acquisitionDate <= hasta) {
+      flujo += purchasePriceAsAportado(a);
+    }
+  }
+  return flujo;
+}
+
+function diaSiguiente(dateStr) {
+  const d = new Date(dateStr + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+// Rentabilidad YTD por TWR (Time-Weighted Return) real: encadena un
+// sub-periodo por cada fecha del año en curso en la que de verdad se
+// registró alguna posición nueva — en vez de tratar todo el año como un
+// único periodo (método Dietz de antes), o forzar un corte artificial cada
+// mes natural aunque no haya datos ese mes. Cada sub-periodo usa Dietz
+// modificado: r = (valorFin - valorInicio - flujoDelPeriodo) / valorInicio,
+// y el resultado final es el producto encadenado de (1+r) de cada
+// sub-periodo, menos 1.
+//
+// Cortar solo en fechas con datos reales es importante: un corte en un mes
+// sin ninguna posición nueva trataría cualquier aportación de ese mes como
+// dinero "desaparecido" (no hay valor que la respalde todavía), inflando
+// una caída ficticia seguida de una subida ficticia al mes siguiente. Al
+// cortar solo donde hay información nueva, con pocos datos el cálculo
+// degenera exactamente al método de un solo periodo (sin perder precisión),
+// y gana precisión cuanto más a menudo actualices tus posiciones.
 export function rentabilidadYtdPct() {
   const now = new Date();
   const year = now.getFullYear();
+  const todayIso = now.toISOString().slice(0, 10);
   const startOfYear = `${year}-01-01`;
 
-  const data = store.get();
-
-  // valor actual: última posición conocida por (entidad, activo)
-  const latestAll = latestPositionsByAssetEntity();
-  const valorActual = latestAll.reduce((s, p) => s + valueOfPosition(p), 0);
-
-  // valor a inicio de año: última posición conocida ANTES de este año, por (entidad, activo)
-  const map = new Map();
-  for (const p of data.positions) {
-    if (p.date >= startOfYear) continue;
-    const key = p.entityId + "|" + p.assetId;
-    const prev = map.get(key);
-    if (!prev || p.date > prev.date) map.set(key, p);
-  }
-  const valorInicioAño = [...map.values()].reduce((s, p) => s + valueOfPosition(p), 0);
-
+  const valorInicioAño = valorTotalHasta(`${year - 1}-12-31`);
   if (!valorInicioAño) return null; // sin histórico suficiente
 
-  let flujosYtd = 0;
-  for (const m of data.movements) {
-    if (m.date < startOfYear) continue;
-    if (m.type === "aportacion" || m.type === "traspaso" || m.type === "compra") flujosYtd += Number(m.amount) || 0;
-    if (m.type === "retirada" || m.type === "venta") flujosYtd -= Number(m.amount) || 0;
+  const data = store.get();
+  const fechas = [...new Set(data.positions.map((p) => p.date).filter((d) => d >= startOfYear && d <= todayIso))].sort();
+  if (fechas[fechas.length - 1] !== todayIso) fechas.push(todayIso);
+
+  let cumFactor = 1;
+  let prevDate = `${year - 1}-12-31`;
+  let prevValue = valorInicioAño;
+
+  for (const d of fechas) {
+    const valorFin = valorTotalHasta(d);
+    const flujo = flujoNetoEntre(diaSiguiente(prevDate), d);
+
+    if (prevValue > 0) {
+      const r = (valorFin - prevValue - flujo) / prevValue;
+      cumFactor *= 1 + r;
+    }
+    prevValue = valorFin;
+    prevDate = d;
   }
 
-  const pct = ((valorActual - valorInicioAño - flujosYtd) / valorInicioAño) * 100;
-  return pct;
+  return (cumFactor - 1) * 100;
 }
 
 // Igual que bandasDeRiesgo(): excluye inmobiliario y cuentas corrientes,
@@ -193,10 +251,17 @@ export function aportadoNetoPorActivo(assetId) {
 }
 
 // Activos dados de alta que todavía no tienen ninguna posición (valor actual) registrada.
+// No incluye activos ya vendidos/retirados del todo (sin posición porque ya
+// no los tienes, no porque falte valorarlos) — esos cuentan como plusvalía
+// realizada en vez de como "pendiente de valorar".
 export function assetsWithoutPosition() {
   const data = store.get();
   const assetIdsWithPosition = new Set(data.positions.map((p) => p.assetId));
-  return data.assets.filter((a) => !assetIdsWithPosition.has(a.id));
+  return data.assets.filter((a) => {
+    if (assetIdsWithPosition.has(a.id)) return false;
+    const fueVendidoORetirado = data.movements.some((m) => m.assetId === a.id && (m.type === "venta" || m.type === "retirada"));
+    return !fueVendidoORetirado;
+  });
 }
 
 export function fechaUltimaActualizacion() {
@@ -323,24 +388,95 @@ export function evolucionAnualPatrimonio() {
 
   const years = [];
   for (let year = firstYear; year <= currentYear; year++) {
-    const cutoff = `${year}-12-31`;
+    years.push({ year, total: valorTotalHasta(`${year}-12-31`) });
+  }
+
+  return years.map((y, i) => ({
+    ...y,
+    yoyPct: i === 0 || !years[i - 1].total ? null : ((y.total - years[i - 1].total) / years[i - 1].total) * 100,
+  }));
+}
+
+// Plusvalía realizada vs. latente. Latente: activos que sigues manteniendo
+// (valor actual - aportado a ese activo). Realizada: activos que ya no
+// tienes ninguna posición Y que en algún momento vendiste o retiraste del
+// todo (aportado neto de ese activo pasa a ser, con el signo cambiado, la
+// ganancia o pérdida ya materializada). Un activo recién dado de alta que
+// aún no tiene ni posición ni venta/retirada registrada no cuenta en
+// ninguna de las dos — sigue pendiente de valorar, igual que en el aviso de
+// "activos sin valor actual registrado".
+//
+// Limitación conocida: si vendes solo PARTE de un activo que sigues
+// manteniendo, esa ganancia parcial ya realizada queda mezclada dentro de
+// "latente" para ese activo (no hay un desglose por lote/participación
+// individual) — separarlo del todo requeriría trackear coste por lote, que
+// hoy no se registra.
+export function plusvaliaRealizadaVsLatente() {
+  const data = store.get();
+  const latestByAsset = new Map();
+  for (const p of latestPositionsByAssetEntity()) latestByAsset.set(p.assetId, p);
+
+  let latente = 0;
+  let realizada = 0;
+
+  for (const asset of data.assets) {
+    const aportado = aportadoNetoPorActivo(asset.id);
+    const latest = latestByAsset.get(asset.id);
+    if (latest) {
+      latente += valueOfPosition(latest) - aportado;
+      continue;
+    }
+    const fueVendidoORetirado = data.movements.some((m) => m.assetId === asset.id && (m.type === "venta" || m.type === "retirada"));
+    if (fueVendidoORetirado) realizada += -aportado;
+  }
+
+  return { realizada, latente, total: realizada + latente };
+}
+
+// Colchón de liquidez (cuentas corrientes + ahorro + depósitos) mes a mes,
+// desde el primer mes con alguna posición de liquidez hasta el actual —
+// mismo criterio de "última posición conocida hasta la fecha de corte" que
+// evolucionAnualPatrimonio(), pero mensual en vez de anual, y solo sobre la
+// clase Liquidez (sin inmobiliario ni el resto de lo financiero).
+export function evolucionMensualLiquidez() {
+  const data = store.get();
+  const isLiquidez = (assetId) => assetById(assetId)?.class === "liquidez";
+  const liquidezDates = data.positions.filter((p) => isLiquidez(p.assetId)).map((p) => p.date);
+  if (!liquidezDates.length) return [];
+
+  const firstMonth = liquidezDates.reduce((min, d) => (d < min ? d : min)).slice(0, 7);
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+  const months = [];
+  let [y, m] = firstMonth.split("-").map(Number);
+  const [cy, cm] = currentMonth.split("-").map(Number);
+  while (y < cy || (y === cy && m <= cm)) {
+    months.push(`${y}-${String(m).padStart(2, "0")}`);
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+
+  const points = months.map((monthKey) => {
+    const cutoff = `${monthKey}-31`;
     const map = new Map();
     for (const p of data.positions) {
+      if (!isLiquidez(p.assetId)) continue;
       if (p.date > cutoff) continue;
       const key = p.entityId + "|" + p.assetId;
       const prev = map.get(key);
       if (!prev || p.date >= prev.date) map.set(key, p);
     }
     let total = 0;
-    for (const p of map.values()) {
-      if (!assetById(p.assetId)) continue;
-      total += valueOfPosition(p);
-    }
-    years.push({ year, total });
-  }
+    for (const p of map.values()) total += valueOfPosition(p);
+    return { month: monthKey, total };
+  });
 
-  return years.map((y, i) => ({
-    ...y,
-    yoyPct: i === 0 || !years[i - 1].total ? null : ((y.total - years[i - 1].total) / years[i - 1].total) * 100,
+  return points.map((pt, i) => ({
+    ...pt,
+    momPct: i === 0 || !points[i - 1].total ? null : ((pt.total - points[i - 1].total) / points[i - 1].total) * 100,
   }));
 }
