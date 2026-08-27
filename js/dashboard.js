@@ -382,6 +382,7 @@ export function renderDashboard(container) {
 
       <section class="card card-risk">
         <h3>Score de riesgo (SRRI, 1-${RISK_SCALE_MAX})</h3>
+        <p class="muted">Excluye inmobiliario y cuentas corrientes.</p>
         ${riskBar("Renta fija", risks.rentaFija)}
         ${riskBar("Renta variable", risks.rentaVariable)}
         ${riskBar("Combinado", risks.combinado)}

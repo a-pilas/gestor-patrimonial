@@ -107,6 +107,8 @@ export function rentabilidadYtdPct() {
   return pct;
 }
 
+// Igual que bandasDeRiesgo(): excluye inmobiliario y cuentas corrientes,
+// para que el score solo refleje el riesgo de lo realmente invertido.
 export function riskScores() {
   const data = store.get();
   const buckets = { renta_fija: { sum: 0, w: 0 }, renta_variable: { sum: 0, w: 0 }, combinado: { sum: 0, w: 0 } };
@@ -114,6 +116,7 @@ export function riskScores() {
   for (const p of latestPositionsByAssetEntity()) {
     const asset = assetById(p.assetId);
     if (!asset) continue;
+    if (asset.class === "inmobiliario" || asset.subclass === "Cuenta corriente") continue;
     const value = valueOfPosition(p);
     if (!value) continue;
     const risk = asset.riskScore != null && asset.riskScore !== "" ? Number(asset.riskScore) : ASSET_CLASSES[asset.class].riskDefault;
