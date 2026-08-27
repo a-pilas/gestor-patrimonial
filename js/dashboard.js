@@ -293,7 +293,7 @@ function riskBandsCard() {
   return `
     <section class="card">
       <h3>Bandas de riesgo</h3>
-      <p class="muted">Agrupa el score SRRI (1-7) de cada activo.</p>
+      <p class="muted">Agrupa el score SRRI (1-7) de cada activo. Excluye inmobiliario y cuentas corrientes.</p>
       <div class="stackbar-total">${fmtEUR(total)}</div>
       <div class="stackbar" role="img" aria-label="${withPct.map((b) => `${b.label} ${fmtPct1(b.pct)}`).join(", ")}">
         ${withPct.map((b) => `<div class="stackbar-seg" style="width:${b.pct}%; background:${RISK_BAND_COLORS[b.key]}"></div>`).join("")}

@@ -149,8 +149,9 @@ export function riskScores() {
 
 // Agrupa el score SRRI (1-7) de cada activo en 3 bandas de riesgo — más
 // granular que el RF/RV/Combinado de arriba (que promedia), ya que aquí ves
-// directamente qué % de tu cartera cae en cada nivel de riesgo. Cubre todo
-// el patrimonio (financiero + inmobiliario), igual que riskScores().
+// directamente qué % de tu cartera cae en cada nivel de riesgo. Excluye
+// inmobiliario y cuentas corrientes: solo interesa el riesgo de lo
+// realmente invertido, no el efectivo operativo ni los inmuebles.
 const RISK_BANDS = [
   { key: "conservador", label: "Conservador (1-2)", min: 1, max: 2 },
   { key: "moderado", label: "Moderado (3-5)", min: 3, max: 5 },
@@ -163,6 +164,7 @@ export function bandasDeRiesgo() {
   for (const p of latestPositionsByAssetEntity()) {
     const asset = assetById(p.assetId);
     if (!asset) continue;
+    if (asset.class === "inmobiliario" || asset.subclass === "Cuenta corriente") continue;
     const value = valueOfPosition(p);
     total += value;
     const risk = asset.riskScore != null && asset.riskScore !== "" ? Number(asset.riskScore) : ASSET_CLASSES[asset.class].riskDefault;
