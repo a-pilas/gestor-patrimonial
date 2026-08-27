@@ -461,8 +461,6 @@ export function renderDashboard(container) {
 
     ${evolutionChartCard()}
 
-    ${plusvaliaCard()}
-
     ${financialBreakdownTable()}
 
     <div class="dash-grid">
@@ -471,6 +469,8 @@ export function renderDashboard(container) {
     </div>
 
     ${liquidityEvolutionCard()}
+
+    ${plusvaliaCard()}
 
     ${financialByEntityTable()}
   `;
