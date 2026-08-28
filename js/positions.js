@@ -1,7 +1,9 @@
 import { UNIT_TRADED_SUBCLASSES, REAL_ESTATE_SUBCLASSES } from "./model.js";
-import { store, latestPositionsByAssetEntity } from "./store.js";
+import { store, latestPositionsByAssetEntity, latestLiabilityPositions } from "./store.js";
 import { aportadoNetoPorActivo, valueOfPosition } from "./metrics.js";
 import { openModal } from "./modal.js";
+
+let bulkMode = false;
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -19,6 +21,11 @@ export function renderPositions(container) {
     container.innerHTML = `<section class="card">
       <p>Antes de introducir posiciones necesitas dar de alta al menos una <strong>entidad</strong> y un <strong>activo</strong> en la pestaña "Activos".</p>
     </section>`;
+    return;
+  }
+
+  if (bulkMode) {
+    renderBulkUpdate(container, data);
     return;
   }
 
@@ -44,7 +51,10 @@ export function renderPositions(container) {
   container.innerHTML = `
     <div class="section-head">
       <h3>Posiciones</h3>
-      <button id="btn-new-position">+ Nueva posición</button>
+      <div class="btn-row">
+        <button id="btn-bulk-update">📅 Actualización mensual</button>
+        <button id="btn-new-position">+ Nueva posición</button>
+      </div>
     </div>
 
     <section class="card">
@@ -247,6 +257,11 @@ export function renderPositions(container) {
     });
   }
 
+  container.querySelector("#btn-bulk-update").addEventListener("click", () => {
+    bulkMode = true;
+    renderPositions(container);
+  });
+
   container.querySelector("#btn-new-position").addEventListener("click", () => openPositionForm(null));
 
   container.querySelectorAll("[data-add-position]").forEach((btn) =>
@@ -268,4 +283,182 @@ export function renderPositions(container) {
       }
     })
   );
+}
+
+function isRealEstateAsset(a) {
+  return a.class === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(a.subclass);
+}
+
+function renderBulkUpdate(container, data) {
+  const assetById = (id) => data.assets.find((a) => a.id === id);
+  const entityName = (id) => data.entities.find((e) => e.id === id)?.name || "—";
+
+  const simpleAssets = data.assets.filter((a) => !isRealEstateAsset(a));
+  const realEstateAssets = data.assets.filter(isRealEstateAsset);
+
+  const latestPosByAsset = new Map();
+  for (const p of [...data.positions].sort((a, b) => (a.date < b.date ? -1 : 1))) {
+    latestPosByAsset.set(p.assetId, p);
+  }
+  const latestLiabPos = new Map(latestLiabilityPositions().map((p) => [p.liabilityId, p]));
+
+  function valuationRowHtml(v) {
+    return `<div class="btn-row bulk-re-source-row">
+      <input class="bulk-re-source-name" value="${v.source || ""}" placeholder="Fuente" />
+      <input class="bulk-re-source-value" type="number" step="any" value="${v.value ?? ""}" placeholder="Valor (€)" />
+      <button type="button" class="link-btn danger bulk-re-remove">quitar</button>
+    </div>`;
+  }
+
+  container.innerHTML = `
+    <div class="section-head">
+      <h3>Actualización mensual</h3>
+      <button id="btn-bulk-cancel" class="link-btn">← Volver</button>
+    </div>
+
+    <section class="card">
+      <label>Fecha de esta actualización <input type="date" id="bulk-date" value="${todayIso()}" required /></label>
+      <p class="muted">Deja un campo en blanco para no registrar ninguna posición nueva en ese activo o deuda.</p>
+    </section>
+
+    <section class="card">
+      <h3>Activos</h3>
+      <div class="bulk-rows">
+        ${
+          simpleAssets
+            .map((a) => {
+              const latest = latestPosByAsset.get(a.id);
+              return `<div class="bulk-row">
+                <span class="bulk-row-label">${a.name} <span class="muted">— ${entityName(a.entityId)}</span></span>
+                <input type="number" step="any" class="bulk-value" data-asset-id="${a.id}" value="${latest && latest.value != null ? latest.value : ""}" placeholder="Valor (€)" />
+              </div>`;
+            })
+            .join("") || '<p class="muted">Sin activos.</p>'
+        }
+      </div>
+    </section>
+
+    ${
+      realEstateAssets.length
+        ? `<section class="card">
+      <h3>Inmuebles</h3>
+      ${realEstateAssets
+        .map((a) => {
+          const latest = latestPosByAsset.get(a.id);
+          const valuations = latest?.valuations?.length ? latest.valuations : [{ source: "", value: "" }];
+          return `<div class="bulk-realestate" data-asset-id="${a.id}" style="margin-bottom:16px">
+            <div class="bulk-row-label">${a.name} <span class="muted">— ${entityName(a.entityId)}</span></div>
+            <div class="bulk-re-sources">${valuations.map(valuationRowHtml).join("")}</div>
+            <button type="button" class="link-btn bulk-re-add">+ Añadir fuente</button>
+          </div>`;
+        })
+        .join("")}
+    </section>`
+        : ""
+    }
+
+    ${
+      data.liabilities.length
+        ? `<section class="card">
+      <h3>Deudas</h3>
+      <div class="bulk-rows">
+        ${data.liabilities
+          .map((l) => {
+            const latest = latestLiabPos.get(l.id);
+            return `<div class="bulk-row">
+              <span class="bulk-row-label">${l.name}</span>
+              <input type="number" step="any" class="bulk-liability-value" data-liability-id="${l.id}" value="${latest && latest.balance != null ? latest.balance : ""}" placeholder="Saldo pendiente (€)" />
+            </div>`;
+          })
+          .join("")}
+      </div>
+    </section>`
+        : ""
+    }
+
+    <div class="btn-row">
+      <button id="btn-bulk-save">Guardar todo</button>
+    </div>
+  `;
+
+  function wireValuationRow(row) {
+    row.querySelector(".bulk-re-remove").addEventListener("click", () => row.remove());
+  }
+  container.querySelectorAll(".bulk-re-source-row").forEach(wireValuationRow);
+
+  container.querySelectorAll(".bulk-re-add").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const wrap = btn.previousElementSibling;
+      const div = document.createElement("div");
+      div.innerHTML = valuationRowHtml({ source: "", value: "" });
+      const row = div.firstElementChild;
+      wrap.appendChild(row);
+      wireValuationRow(row);
+    });
+  });
+
+  container.querySelector("#btn-bulk-cancel").addEventListener("click", () => {
+    bulkMode = false;
+    renderPositions(container);
+  });
+
+  container.querySelector("#btn-bulk-save").addEventListener("click", () => {
+    const date = container.querySelector("#bulk-date").value;
+    if (!date) {
+      alert("Elige una fecha.");
+      return;
+    }
+
+    let count = 0;
+
+    container.querySelectorAll(".bulk-value").forEach((input) => {
+      const val = input.value.trim();
+      if (val === "") return;
+      const assetId = input.dataset.assetId;
+      const asset = assetById(assetId);
+      store.addPosition({
+        date,
+        entityId: asset?.entityId || null,
+        assetId,
+        units: null,
+        navValue: null,
+        value: Number(val),
+      });
+      count++;
+    });
+
+    container.querySelectorAll(".bulk-realestate").forEach((block) => {
+      const assetId = block.dataset.assetId;
+      const asset = assetById(assetId);
+      const valuations = [...block.querySelectorAll(".bulk-re-source-row")]
+        .map((row) => ({
+          source: row.querySelector(".bulk-re-source-name").value.trim(),
+          value: parseFloat(row.querySelector(".bulk-re-source-value").value),
+        }))
+        .filter((v) => !isNaN(v.value));
+      if (!valuations.length) return;
+      store.addPosition({
+        date,
+        entityId: asset?.entityId || null,
+        assetId,
+        units: null,
+        navValue: null,
+        value: null,
+        valuations,
+      });
+      count++;
+    });
+
+    container.querySelectorAll(".bulk-liability-value").forEach((input) => {
+      const val = input.value.trim();
+      if (val === "") return;
+      const liabilityId = input.dataset.liabilityId;
+      store.addLiabilityPosition({ date, liabilityId, balance: Number(val) });
+      count++;
+    });
+
+    bulkMode = false;
+    alert(`Guardadas ${count} posiciones con fecha ${date}.`);
+    renderPositions(container);
+  });
 }

@@ -154,6 +154,25 @@ body {
 .valuation-row { align-items: center; margin-bottom: 8px; }
 .valuation-row input { flex: 1; min-width: 0; }
 
+.bulk-rows { display: flex; flex-direction: column; gap: 10px; }
+.bulk-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px dashed var(--border);
+  padding-bottom: 8px;
+}
+.bulk-row-label { flex: 1; min-width: 0; }
+.bulk-row input { width: 140px; flex: 0 0 auto; }
+.bulk-re-source-row { align-items: center; margin-bottom: 6px; }
+.bulk-re-source-row input { flex: 1; min-width: 0; }
+
+@media (max-width: 560px) {
+  .bulk-row { flex-direction: column; align-items: stretch; }
+  .bulk-row input { width: 100%; }
+}
+
 input, select, button {
   background: #142621;
   border: 1px solid var(--border);
