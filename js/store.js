@@ -181,6 +181,24 @@ export const store = {
     persist();
   },
 
+  // --- Decisiones (propuestas del asesor vs. decisión familiar tomada) ---
+  addDecision(decision) {
+    const d = { id: uid(), asesor: "", notas: "", ...decision };
+    data.decisions.push(d);
+    persist();
+    return d;
+  },
+  updateDecision(id, patch) {
+    const existing = data.decisions.find((d) => d.id === id);
+    if (existing) Object.assign(existing, patch);
+    persist();
+    return existing;
+  },
+  removeDecision(id) {
+    data.decisions = data.decisions.filter((d) => d.id !== id);
+    persist();
+  },
+
   // --- Import / Export ---
   exportJson() {
     return JSON.stringify(data, null, 2);

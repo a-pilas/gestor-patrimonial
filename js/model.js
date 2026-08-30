@@ -81,6 +81,13 @@ export const MOVEMENT_TYPES = {
   comision: "Comisión",
 };
 
+// Trazabilidad de propuestas del asesor vs. decisión familiar tomada (Fase 4).
+export const DECISION_STATUSES = {
+  aceptada: "Aceptada",
+  rechazada: "Rechazada",
+  modificada: "Modificada",
+};
+
 export function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }

@@ -176,7 +176,7 @@ body {
   .bulk-row input { width: 100%; }
 }
 
-input, select, button {
+input, select, textarea, button {
   background: #142621;
   border: 1px solid var(--border);
   color: var(--text);
@@ -185,6 +185,7 @@ input, select, button {
   font-size: 0.95rem;
   max-width: 100%;
 }
+textarea { font-family: inherit; resize: vertical; }
 button {
   background: var(--brand);
   cursor: pointer;
