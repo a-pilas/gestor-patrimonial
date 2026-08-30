@@ -1,6 +1,6 @@
 import { store } from "./store.js";
 import { changePin, removePin } from "./lock.js";
-import { ASSET_CLASSES, DEFAULT_TRAMOS_AHORRO, DEFAULT_TRAMOS_PATRIMONIO } from "./model.js";
+import { ASSET_CLASSES, DEFAULT_TRAMOS_AHORRO, DEFAULT_TRAMOS_PATRIMONIO, DEFAULT_TRAMOS_ITP_VIVIENDA } from "./model.js";
 
 export function renderSettings(container) {
   const data = store.get();
@@ -89,6 +89,26 @@ export function renderSettings(container) {
         <input id="vencimiento-dias-aviso" type="number" step="1" min="0" value="${data.meta.vencimientoDiasAviso}" />
       </label>
       <button id="save-alertas-umbrales">Guardar</button>
+    </section>
+
+    <section class="card">
+      <h3>Simulador — Compra de propiedad</h3>
+      <p class="muted">Impuestos vigentes en Galicia. Ajústalos si cambia la normativa o tu residencia fiscal.</p>
+      <p class="muted" style="margin-top:10px"><strong>Vivienda usada — tramos de ITP (%)</strong></p>
+      <div id="tramos-itp-rows"></div>
+      <button type="button" id="btn-add-tramo-itp" class="link-btn">+ Añadir tramo</button>
+      <label style="margin-top:12px">Vivienda nueva — IVA (%)
+        <input id="iva-vivienda-nueva" type="number" step="any" min="0" value="${data.meta.ivaViviendaNuevaPct}" />
+      </label>
+      <label>Vivienda nueva — AJD (%)
+        <input id="ajd-vivienda-nueva" type="number" step="any" min="0" value="${data.meta.ajdViviendaNuevaPct}" />
+      </label>
+      <label>Otros gastos de compra — notaría, registro, gestoría (%)
+        <input id="otros-gastos-compra" type="number" step="any" min="0" value="${data.meta.otrosGastosCompraPct}" />
+      </label>
+      <div class="btn-row" style="margin-top:10px">
+        <button id="save-compra-propiedad">Guardar</button>
+      </div>
     </section>
 
     <section class="card">
@@ -249,6 +269,48 @@ export function renderSettings(container) {
       return;
     }
     store.updateMeta({ concentracionActivoUmbralPct, concentracionEntidadUmbralPct, vencimientoDiasAviso });
+    alert("Guardado.");
+  });
+
+  const tramosItpRows = container.querySelector("#tramos-itp-rows");
+
+  function renderTramoItpRow(t) {
+    const div = document.createElement("div");
+    div.className = "btn-row tramo-row";
+    div.innerHTML = `
+      <input class="tramo-hasta" type="number" step="any" min="0" placeholder="Hasta (€, vacío = sin límite)" value="${t.hasta ?? ""}" />
+      <input class="tramo-pct" type="number" step="any" min="0" max="100" placeholder="%" value="${t.pct ?? ""}" style="max-width:90px" />
+      <button type="button" class="link-btn danger tramo-remove">quitar</button>
+    `;
+    div.querySelector(".tramo-remove").addEventListener("click", () => div.remove());
+    tramosItpRows.appendChild(div);
+  }
+
+  (data.meta.tramosItpVivienda?.length ? data.meta.tramosItpVivienda : DEFAULT_TRAMOS_ITP_VIVIENDA).forEach(renderTramoItpRow);
+
+  container.querySelector("#btn-add-tramo-itp").addEventListener("click", () => {
+    renderTramoItpRow({ hasta: "", pct: "" });
+  });
+
+  container.querySelector("#save-compra-propiedad").addEventListener("click", () => {
+    const ivaViviendaNuevaPct = Number(container.querySelector("#iva-vivienda-nueva").value);
+    const ajdViviendaNuevaPct = Number(container.querySelector("#ajd-vivienda-nueva").value);
+    const otrosGastosCompraPct = Number(container.querySelector("#otros-gastos-compra").value);
+    if ([ivaViviendaNuevaPct, ajdViviendaNuevaPct, otrosGastosCompraPct].some((n) => isNaN(n) || n < 0)) {
+      alert("Introduce valores válidos.");
+      return;
+    }
+    const tramosItpVivienda = [...tramosItpRows.querySelectorAll(".tramo-row")]
+      .map((row) => ({
+        hasta: row.querySelector(".tramo-hasta").value.trim() === "" ? null : Number(row.querySelector(".tramo-hasta").value),
+        pct: Number(row.querySelector(".tramo-pct").value),
+      }))
+      .filter((t) => !isNaN(t.pct));
+    if (!tramosItpVivienda.length) {
+      alert("Añade al menos un tramo de ITP con su porcentaje.");
+      return;
+    }
+    store.updateMeta({ ivaViviendaNuevaPct, ajdViviendaNuevaPct, otrosGastosCompraPct, tramosItpVivienda });
     alert("Guardado.");
   });
 

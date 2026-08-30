@@ -603,6 +603,57 @@ export function duracionPatrimonio({ gastoAnual, rentabilidadPct, inflacionPct, 
   return { patrimonioInicial, alquilerAnual, aniosDuracion: DURACION_MAX_ANIOS, agotado: false, serie };
 }
 
+// Simula la compra de una propiedad adicional financiada con hipoteca a
+// tipo fijo: impuestos de la operación (ITP progresivo si es vivienda usada,
+// o IVA+AJD si es nueva) + otros gastos (notaría, registro, gestoría),
+// entrada necesaria, cuota mensual (sistema francés, cuota constante) y el
+// impacto real en patrimonio neto y liquidez. El precio pagado se convierte
+// en un activo del mismo valor, así que el patrimonio neto solo baja por
+// los costes de la operación (impuestos + otros gastos), no por el precio
+// en sí — la entrada y la hipoteca son solo la forma de financiarlo.
+export function simulacionCompraPropiedad({ precio, tipoVivienda, importeHipoteca, tipoInteresPct, plazoAnios }) {
+  const data = store.get();
+  const otrosGastosPct = Number(data.meta.otrosGastosCompraPct) || 0;
+
+  const impuestos =
+    tipoVivienda === "nueva"
+      ? precio * ((Number(data.meta.ivaViviendaNuevaPct) || 0) / 100) + precio * ((Number(data.meta.ajdViviendaNuevaPct) || 0) / 100)
+      : cuotaProgresiva(precio, data.meta.tramosItpVivienda || []);
+
+  const otrosGastos = precio * (otrosGastosPct / 100);
+  const costeTotalAdquisicion = precio + impuestos + otrosGastos;
+  const entradaNecesaria = costeTotalAdquisicion - importeHipoteca;
+
+  const tipoMensual = (Number(tipoInteresPct) || 0) / 100 / 12;
+  const meses = Math.round((Number(plazoAnios) || 0) * 12);
+  let cuotaMensual = 0;
+  if (importeHipoteca > 0 && meses > 0) {
+    cuotaMensual =
+      tipoMensual === 0
+        ? importeHipoteca / meses
+        : (importeHipoteca * tipoMensual * Math.pow(1 + tipoMensual, meses)) / (Math.pow(1 + tipoMensual, meses) - 1);
+  }
+  const totalIntereses = cuotaMensual * meses - importeHipoteca;
+
+  const liquidezActual = patrimonioConsolidado().liquidez;
+  const patrimonioNetoActual = patrimonioNeto();
+
+  return {
+    impuestos,
+    otrosGastos,
+    costeTotalAdquisicion,
+    entradaNecesaria,
+    cuotaMensual,
+    totalIntereses,
+    liquidezActual,
+    liquidezRestante: liquidezActual - entradaNecesaria,
+    patrimonioNetoActual,
+    impactoPatrimonioNeto: -(impuestos + otrosGastos),
+    cuotaMensualActual: totalCuotaMensual(),
+    cuotaMensualTotalDespues: totalCuotaMensual() + cuotaMensual,
+  };
+}
+
 // Simulador "¿y si vendo todo hoy?": parte de la plusvalía latente total
 // (todo lo que sigues manteniendo, si se materializara íntegra hoy) y estima
 // el coste fiscal INCREMENTAL de hacerlo — no aislado, sino sumado a lo que

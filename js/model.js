@@ -75,6 +75,20 @@ export const DEFAULT_VENCIMIENTO_DIAS_AVISO = 30;
 // simulador de duración del patrimonio — editable, no es una previsión.
 export const DEFAULT_INFLACION_PCT = 2;
 
+// Compra de una propiedad — impuestos vigentes en Galicia (2025-2026):
+// vivienda usada tributa por ITP en tramos progresivos (8/9/10%); vivienda
+// nueva por IVA (10%) + AJD (1,5%, a cargo del comprador solo en la
+// escritura de compraventa, no en la de préstamo hipotecario desde el
+// RD-ley 17/2018). "Otros gastos" agrupa notaría, registro y gestoría.
+export const DEFAULT_TRAMOS_ITP_VIVIENDA = [
+  { hasta: 150000, pct: 8 },
+  { hasta: 600000, pct: 9 },
+  { hasta: null, pct: 10 },
+];
+export const DEFAULT_IVA_VIVIENDA_NUEVA_PCT = 10;
+export const DEFAULT_AJD_VIVIENDA_NUEVA_PCT = 1.5;
+export const DEFAULT_OTROS_GASTOS_COMPRA_PCT = 1.5;
+
 export const MOVEMENT_TYPES = {
   aportacion: "Aportación",
   retirada: "Retirada",
@@ -115,6 +129,15 @@ export function emptyData() {
       jubilacionRentabilidadPct: null,
       jubilacionInflacionPct: DEFAULT_INFLACION_PCT,
       jubilacionIncluirAlquileres: true,
+      tramosItpVivienda: DEFAULT_TRAMOS_ITP_VIVIENDA,
+      ivaViviendaNuevaPct: DEFAULT_IVA_VIVIENDA_NUEVA_PCT,
+      ajdViviendaNuevaPct: DEFAULT_AJD_VIVIENDA_NUEVA_PCT,
+      otrosGastosCompraPct: DEFAULT_OTROS_GASTOS_COMPRA_PCT,
+      compraPropiedadPrecio: null,
+      compraPropiedadTipoVivienda: "usada",
+      compraPropiedadImporteHipoteca: null,
+      compraPropiedadTipoInteresPct: null,
+      compraPropiedadPlazoAnios: null,
       version: 1,
     },
     entities: [],
