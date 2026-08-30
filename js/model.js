@@ -71,6 +71,10 @@ export const DEFAULT_CONCENTRACION_ACTIVO_UMBRAL_PCT = 20;
 export const DEFAULT_CONCENTRACION_ENTIDAD_UMBRAL_PCT = 40;
 export const DEFAULT_VENCIMIENTO_DIAS_AVISO = 30;
 
+// Objetivo de inflación del BCE, como valor de partida razonable para el
+// simulador de duración del patrimonio — editable, no es una previsión.
+export const DEFAULT_INFLACION_PCT = 2;
+
 export const MOVEMENT_TYPES = {
   aportacion: "Aportación",
   retirada: "Retirada",
@@ -107,6 +111,10 @@ export function emptyData() {
       concentracionActivoUmbralPct: DEFAULT_CONCENTRACION_ACTIVO_UMBRAL_PCT,
       concentracionEntidadUmbralPct: DEFAULT_CONCENTRACION_ENTIDAD_UMBRAL_PCT,
       vencimientoDiasAviso: DEFAULT_VENCIMIENTO_DIAS_AVISO,
+      jubilacionGastoAnual: null,
+      jubilacionRentabilidadPct: null,
+      jubilacionInflacionPct: DEFAULT_INFLACION_PCT,
+      jubilacionIncluirAlquileres: true,
       version: 1,
     },
     entities: [],

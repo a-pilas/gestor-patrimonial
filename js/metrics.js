@@ -562,6 +562,47 @@ export function cuotaPatrimonioEstimada() {
   };
 }
 
+// --- Fase 5: proyección de jubilación ---
+
+// Ingreso anual por alquiler de todos los activos marcados como "en
+// rentabilidad" (hoy solo inmuebles físicos tienen ese check, pero no se
+// restringe aquí por si algún día se marca otro tipo de activo).
+export function alquilerAnualTotal() {
+  const data = store.get();
+  return data.assets.filter((a) => a.rented).reduce((s, a) => s + (Number(a.rentaAnual) || 0), 0);
+}
+
+// Simulación año a año de cuánto dura el patrimonio FINANCIERO (los
+// inmuebles no se venden ni se cuentan como fondo gastable, solo aportan su
+// alquiler si se activa) a un ritmo de gasto anual que crece con la
+// inflación, con una rentabilidad anual constante asumida. Es una
+// simplificación deliberada: no modela volatilidad de mercado ni riesgo de
+// secuencia de rentabilidad, fiscalidad sobre los reembolsos, ni pensión
+// pública. Corta a los 60 años si el patrimonio no se agota antes.
+const DURACION_MAX_ANIOS = 60;
+
+export function duracionPatrimonio({ gastoAnual, rentabilidadPct, inflacionPct, incluirAlquileres }) {
+  const patrimonioInicial = financialBreakdownBySubclass().total;
+  const alquilerAnual = incluirAlquileres ? alquilerAnualTotal() : 0;
+  const rentabilidad = (Number(rentabilidadPct) || 0) / 100;
+  const inflacion = (Number(inflacionPct) || 0) / 100;
+
+  let patrimonio = patrimonioInicial;
+  const serie = [{ anio: 0, patrimonio }];
+
+  for (let anio = 1; anio <= DURACION_MAX_ANIOS; anio++) {
+    const factorInflacion = Math.pow(1 + inflacion, anio - 1);
+    const gastoNeto = (Number(gastoAnual) || 0) * factorInflacion - alquilerAnual * factorInflacion;
+    patrimonio = patrimonio * (1 + rentabilidad) - gastoNeto;
+    if (patrimonio <= 0) {
+      serie.push({ anio, patrimonio: 0 });
+      return { patrimonioInicial, alquilerAnual, aniosDuracion: anio, agotado: true, serie };
+    }
+    serie.push({ anio, patrimonio });
+  }
+  return { patrimonioInicial, alquilerAnual, aniosDuracion: DURACION_MAX_ANIOS, agotado: false, serie };
+}
+
 // Simulador "¿y si vendo todo hoy?": parte de la plusvalía latente total
 // (todo lo que sigues manteniendo, si se materializara íntegra hoy) y estima
 // el coste fiscal INCREMENTAL de hacerlo — no aislado, sino sumado a lo que

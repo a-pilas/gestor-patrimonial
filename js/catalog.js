@@ -68,6 +68,9 @@ export function renderCatalog(container) {
                   <label>Precio de compra (€) <input name="purchasePrice" type="number" step="any" value="${editing?.purchasePrice ?? ""}" placeholder="Opcional" /></label>
                   <label>Fecha de adquisición <input name="acquisitionDate" type="date" value="${editing?.acquisitionDate || ""}" placeholder="Opcional" /></label>
                   <label class="checkbox-label"><input name="rented" type="checkbox" ${editing?.rented ? "checked" : ""} /> En rentabilidad (alquilado)</label>
+                  <label id="renta-anual-field" style="display:none">Ingreso anual por alquiler (€)
+                    <input name="rentaAnual" type="number" step="any" min="0" value="${editing?.rentaAnual ?? ""}" placeholder="Total al año, antes de gastos/impuestos" />
+                  </label>
                   <label id="vivienda-habitual-field" style="display:none" class="checkbox-label">
                     <input name="viviendaHabitual" type="checkbox" ${editing?.viviendaHabitual ? "checked" : ""} /> Es tu vivienda habitual
                   </label>
@@ -103,7 +106,7 @@ export function renderCatalog(container) {
                     <td>${ASSET_CLASSES[a.class]?.label || a.class}</td>
                     <td>${a.subclass || "—"}${a.class === "mixto" && a.mixRvPct != null ? ` (${a.mixRvPct}% RV / ${100 - a.mixRvPct}% RF)` : ""}${
                       a.class === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(a.subclass)
-                        ? ` <span class="muted">(compra ${fmtEUR(a.purchasePrice)}${a.acquisitionDate ? ` el ${a.acquisitionDate}` : ""}${a.rented ? " · en rentabilidad" : ""}${a.viviendaHabitual ? " · vivienda habitual" : ""}${a.wealthTaxValue ? ` · Patrimonio ${fmtEUR(a.wealthTaxValue)}` : ""})</span>`
+                        ? ` <span class="muted">(compra ${fmtEUR(a.purchasePrice)}${a.acquisitionDate ? ` el ${a.acquisitionDate}` : ""}${a.rented ? ` · en rentabilidad${a.rentaAnual ? ` (${fmtEUR(a.rentaAnual)}/año)` : ""}` : ""}${a.viviendaHabitual ? " · vivienda habitual" : ""}${a.wealthTaxValue ? ` · Patrimonio ${fmtEUR(a.wealthTaxValue)}` : ""})</span>`
                         : ""
                     }${a.vencimiento ? ` <span class="muted">(vence ${a.vencimiento})</span>` : ""}</td>
                     <td>${a.isin || "—"}</td>
@@ -128,6 +131,15 @@ export function renderCatalog(container) {
   const realEstateFields = container.querySelector("#real-estate-fields");
   const viviendaHabitualField = container.querySelector("#vivienda-habitual-field");
   const vencimientoField = container.querySelector("#vencimiento-field");
+  const rentedCheckbox = container.querySelector('input[name="rented"]');
+  const rentaAnualField = container.querySelector("#renta-anual-field");
+  if (rentedCheckbox) {
+    function refreshRentaAnualField() {
+      rentaAnualField.style.display = rentedCheckbox.checked ? "" : "none";
+    }
+    rentedCheckbox.addEventListener("change", refreshRentaAnualField);
+    refreshRentaAnualField();
+  }
   if (classSelect && subclassSelect) {
     function refreshSubclasses() {
       const opts = SUBCLASSES[classSelect.value] || [];
@@ -194,6 +206,7 @@ export function renderCatalog(container) {
       purchasePrice: isRealEstate && fd.get("purchasePrice") ? Number(fd.get("purchasePrice")) : null,
       acquisitionDate: isRealEstate && fd.get("acquisitionDate") ? fd.get("acquisitionDate") : null,
       rented: isRealEstate ? fd.get("rented") === "on" : false,
+      rentaAnual: isRealEstate && fd.get("rented") === "on" && fd.get("rentaAnual") ? Number(fd.get("rentaAnual")) : null,
       wealthTaxValue: isRealEstate && fd.get("wealthTaxValue") ? Number(fd.get("wealthTaxValue")) : null,
       viviendaHabitual: isRealEstate && fd.get("subclass") === "Vivienda" ? fd.get("viviendaHabitual") === "on" : false,
       vencimiento: SUBCLASSES_CON_VENCIMIENTO.includes(fd.get("subclass")) && fd.get("vencimiento") ? fd.get("vencimiento") : null,
