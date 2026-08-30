@@ -43,6 +43,25 @@ export const DEFAULT_TRAMOS_AHORRO = [
   { hasta: null, pct: 30 },
 ];
 
+// Impuesto sobre el Patrimonio — escala autonómica de Galicia (2025-2026):
+// misma tarifa que la estatal subsidiaria, con una bonificación general del
+// 50% sobre la cuota íntegra. Mínimo exento: 700.000 € por contribuyente
+// (aparte, la vivienda habitual tiene su propia exención de 300.000 € por
+// contribuyente, ya contemplada aparte en el cálculo). Todo editable en
+// Ajustes por si cambia la normativa o cambias de residencia fiscal.
+export const DEFAULT_PATRIMONIO_MINIMO_EXENTO = 700000;
+export const DEFAULT_PATRIMONIO_BONIFICACION_PCT = 50;
+export const DEFAULT_TRAMOS_PATRIMONIO = [
+  { hasta: 167129.45, pct: 0.2 },
+  { hasta: 334252.88, pct: 0.3 },
+  { hasta: 668499.75, pct: 0.5 },
+  { hasta: 1336999.51, pct: 0.9 },
+  { hasta: 2673999.01, pct: 1.3 },
+  { hasta: 5347998.03, pct: 1.7 },
+  { hasta: 10695996.06, pct: 2.1 },
+  { hasta: null, pct: 3.5 },
+];
+
 export const MOVEMENT_TYPES = {
   aportacion: "Aportación",
   retirada: "Retirada",
@@ -64,6 +83,9 @@ export function emptyData() {
       benchmarkYtdPct: null,
       realEstateSafetyPct: DEFAULT_REAL_ESTATE_SAFETY_PCT,
       tramosAhorro: DEFAULT_TRAMOS_AHORRO,
+      patrimonioMinimoExento: DEFAULT_PATRIMONIO_MINIMO_EXENTO,
+      patrimonioBonificacionPct: DEFAULT_PATRIMONIO_BONIFICACION_PCT,
+      tramosPatrimonio: DEFAULT_TRAMOS_PATRIMONIO,
       version: 1,
     },
     entities: [],

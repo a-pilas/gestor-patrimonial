@@ -1,6 +1,6 @@
 import { store } from "./store.js";
 import { changePin, removePin } from "./lock.js";
-import { DEFAULT_TRAMOS_AHORRO } from "./model.js";
+import { DEFAULT_TRAMOS_AHORRO, DEFAULT_TRAMOS_PATRIMONIO } from "./model.js";
 
 export function renderSettings(container) {
   const data = store.get();
@@ -41,6 +41,23 @@ export function renderSettings(container) {
       <button type="button" id="btn-add-tramo" class="link-btn">+ Añadir tramo</button>
       <div class="btn-row" style="margin-top:10px">
         <button id="save-tramos">Guardar tramos</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Impuesto sobre el Patrimonio</h3>
+      <p class="muted">Valores por defecto de Galicia. Ajústalos si cambia la normativa o tu residencia fiscal.</p>
+      <label>Mínimo exento por contribuyente (€)
+        <input id="patrimonio-minimo-exento" type="number" step="any" min="0" value="${data.meta.patrimonioMinimoExento}" />
+      </label>
+      <label>Bonificación autonómica sobre la cuota íntegra (%)
+        <input id="patrimonio-bonificacion" type="number" step="any" min="0" max="100" value="${data.meta.patrimonioBonificacionPct}" />
+      </label>
+      <p class="muted" style="margin-top:12px">Escala de tramos por contribuyente (deja "Hasta" en blanco en el tramo que cubre el resto sin límite superior):</p>
+      <div id="tramos-patrimonio-rows"></div>
+      <button type="button" id="btn-add-tramo-patrimonio" class="link-btn">+ Añadir tramo</button>
+      <div class="btn-row" style="margin-top:10px">
+        <button id="save-patrimonio">Guardar</button>
       </div>
     </section>
 
@@ -131,6 +148,51 @@ export function renderSettings(container) {
       return;
     }
     store.updateMeta({ tramosAhorro: tramos });
+    alert("Guardado.");
+  });
+
+  const tramosPatrimonioRows = container.querySelector("#tramos-patrimonio-rows");
+
+  function renderTramoPatrimonioRow(t) {
+    const div = document.createElement("div");
+    div.className = "btn-row tramo-row";
+    div.innerHTML = `
+      <input class="tramo-hasta" type="number" step="any" min="0" placeholder="Hasta (€, vacío = sin límite)" value="${t.hasta ?? ""}" />
+      <input class="tramo-pct" type="number" step="any" min="0" max="100" placeholder="%" value="${t.pct ?? ""}" style="max-width:90px" />
+      <button type="button" class="link-btn danger tramo-remove">quitar</button>
+    `;
+    div.querySelector(".tramo-remove").addEventListener("click", () => div.remove());
+    tramosPatrimonioRows.appendChild(div);
+  }
+
+  (data.meta.tramosPatrimonio?.length ? data.meta.tramosPatrimonio : DEFAULT_TRAMOS_PATRIMONIO).forEach(renderTramoPatrimonioRow);
+
+  container.querySelector("#btn-add-tramo-patrimonio").addEventListener("click", () => {
+    renderTramoPatrimonioRow({ hasta: "", pct: "" });
+  });
+
+  container.querySelector("#save-patrimonio").addEventListener("click", () => {
+    const minimoExento = Number(container.querySelector("#patrimonio-minimo-exento").value);
+    const bonificacionPct = Number(container.querySelector("#patrimonio-bonificacion").value);
+    if (isNaN(minimoExento) || minimoExento < 0) {
+      alert("Introduce un mínimo exento válido.");
+      return;
+    }
+    if (isNaN(bonificacionPct) || bonificacionPct < 0 || bonificacionPct > 100) {
+      alert("Introduce una bonificación entre 0 y 100.");
+      return;
+    }
+    const tramos = [...tramosPatrimonioRows.querySelectorAll(".tramo-row")]
+      .map((row) => ({
+        hasta: row.querySelector(".tramo-hasta").value.trim() === "" ? null : Number(row.querySelector(".tramo-hasta").value),
+        pct: Number(row.querySelector(".tramo-pct").value),
+      }))
+      .filter((t) => !isNaN(t.pct));
+    if (!tramos.length) {
+      alert("Añade al menos un tramo con su porcentaje.");
+      return;
+    }
+    store.updateMeta({ patrimonioMinimoExento: minimoExento, patrimonioBonificacionPct: bonificacionPct, tramosPatrimonio: tramos });
     alert("Guardado.");
   });
 

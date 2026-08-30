@@ -475,11 +475,12 @@ export function comisionesEnAño(year) {
     .reduce((s, m) => s + (Number(m.amount) || 0), 0);
 }
 
-// Cuota estimada de IRPF sobre la base del ahorro, aplicando tramos
-// progresivos (cada tramo tributa solo por la parte que le corresponde).
+// Cuota estimada aplicando una escala de tramos progresivos (cada tramo
+// tributa solo por la parte que le corresponde) — se usa tanto para el IRPF
+// del ahorro como para el Impuesto sobre el Patrimonio.
 // tramos: [{hasta: number|null, pct}] — hasta:null en un tramo cubre el
 // resto sin límite superior; se reordenan aquí por si no vienen ordenados.
-export function cuotaAhorroEstimada(base, tramos) {
+export function cuotaProgresiva(base, tramos) {
   if (!base || base <= 0 || !tramos?.length) return 0;
   const ordenados = [...tramos].sort((a, b) => (a.hasta ?? Infinity) - (b.hasta ?? Infinity));
   let cuota = 0;
@@ -494,6 +495,71 @@ export function cuotaAhorroEstimada(base, tramos) {
     if (restante <= 0) break;
   }
   return cuota;
+}
+
+// Base del Impuesto sobre el Patrimonio del hogar, a repartir entre los 2
+// cónyuges (gananciales al 50%, 2 sujetos pasivos): todos los activos
+// financieros a valor de mercado actual (incluidas cuentas corrientes: la
+// Agencia Tributaria ya tiene ese dato vía las entidades) + inmuebles
+// físicos a su "valor a efectos de Patrimonio" (no el valor de mercado ni el
+// precio de compra: por normativa es el mayor entre valor catastral, valor
+// comprobado por la Administración a otros efectos, o valor de adquisición
+// — hay que introducirlo aparte por activo) − deudas pendientes. La vivienda
+// habitual descuenta primero su exención (300.000 € por contribuyente,
+// 600.000 € en total al ser 2 sujetos pasivos) y solo el exceso, si lo hay,
+// entra en la base.
+export function baseImponiblePatrimonio() {
+  let base = 0;
+  let exencionViviendaHabitual = 0;
+
+  for (const p of latestPositionsByAssetEntity()) {
+    const asset = assetById(p.assetId);
+    if (!asset) continue;
+    const esInmuebleFisico = asset.class === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(asset.subclass);
+    if (!esInmuebleFisico) {
+      base += valueOfPosition(p);
+      continue;
+    }
+    const valorFiscal = Number(asset.wealthTaxValue) || 0;
+    if (asset.viviendaHabitual) {
+      const exento = Math.min(valorFiscal, 600000);
+      exencionViviendaHabitual += exento;
+      base += valorFiscal - exento;
+    } else {
+      base += valorFiscal;
+    }
+  }
+
+  const deuda = totalDeudaPendiente();
+  const patrimonioNetoFiscal = base - deuda;
+  return { base, exencionViviendaHabitual, deuda, patrimonioNetoFiscal, basePorSujeto: patrimonioNetoFiscal / 2 };
+}
+
+// Cuota estimada del Impuesto sobre el Patrimonio: aplica el mínimo exento
+// y la escala de tramos por contribuyente (por defecto, la de Galicia), más
+// la bonificación autonómica sobre la cuota íntegra, y duplica el resultado
+// para el total del matrimonio (2 sujetos pasivos con base idéntica al
+// repartirse el patrimonio al 50%).
+export function cuotaPatrimonioEstimada() {
+  const data = store.get();
+  const detalle = baseImponiblePatrimonio();
+  const minimoExento = Number(data.meta.patrimonioMinimoExento) || 0;
+  const bonificacionPct = Number(data.meta.patrimonioBonificacionPct) || 0;
+  const tramos = data.meta.tramosPatrimonio || [];
+
+  const baseLiquidablePorSujeto = Math.max(0, detalle.basePorSujeto - minimoExento);
+  const cuotaIntegraPorSujeto = cuotaProgresiva(baseLiquidablePorSujeto, tramos);
+  const cuotaFinalPorSujeto = cuotaIntegraPorSujeto * (1 - bonificacionPct / 100);
+
+  return {
+    ...detalle,
+    minimoExento,
+    baseLiquidablePorSujeto,
+    cuotaIntegraPorSujeto,
+    bonificacionPct,
+    cuotaFinalPorSujeto,
+    cuotaFinalTotal: cuotaFinalPorSujeto * 2,
+  };
 }
 
 // Colchón de liquidez (cuentas corrientes + ahorro + depósitos) mes a mes,

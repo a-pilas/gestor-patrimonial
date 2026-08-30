@@ -1,5 +1,5 @@
 import { store } from "./store.js";
-import { gananciasRealizadasEnAño, dividendosEnAño, comisionesEnAño, cuotaAhorroEstimada } from "./metrics.js";
+import { gananciasRealizadasEnAño, dividendosEnAño, comisionesEnAño, cuotaProgresiva, cuotaPatrimonioEstimada } from "./metrics.js";
 
 // Recuerda el año seleccionado entre renders (p.ej. al volver a esta pestaña).
 let selectedYear = null;
@@ -27,8 +27,10 @@ export function renderFiscal(container) {
   const comisiones = comisionesEnAño(year);
   const baseAhorro = ganancias + dividendos;
   const tramos = data.meta.tramosAhorro || [];
-  const cuota = cuotaAhorroEstimada(Math.max(0, baseAhorro), tramos);
+  const cuota = cuotaProgresiva(Math.max(0, baseAhorro), tramos);
   const tramosOrdenados = [...tramos].sort((a, b) => (a.hasta ?? Infinity) - (b.hasta ?? Infinity));
+
+  const patrimonio = cuotaPatrimonioEstimada();
 
   container.innerHTML = `
     <div class="section-head">
@@ -76,6 +78,21 @@ export function renderFiscal(container) {
           : ""
       }
       <p class="muted">Tramos usados: ${tramosOrdenados.map((t) => `${t.hasta ? "hasta " + fmtEUR(t.hasta) : "resto"} al ${t.pct}%`).join(" · ")}. Ajústalos en Ajustes si cambia la normativa.</p>
+    </section>
+
+    <section class="card">
+      <h3>Impuesto sobre el Patrimonio (estimado, a 31/12)</h3>
+      <p class="muted">Calculado sobre tu situación actual, no a cierre de año. Incluye todos los activos financieros a valor de mercado (también cuentas corrientes) y los inmuebles físicos a su "Valor a efectos de Patrimonio" (no el precio de compra ni el valor de mercado — ver Activos). Repartido entre 2 sujetos pasivos (gananciales al 50%).</p>
+      <div class="kpi-row"><span>Patrimonio neto fiscal (hogar)</span><span>${fmtEUR(patrimonio.patrimonioNetoFiscal)}</span></div>
+      ${patrimonio.exencionViviendaHabitual > 0 ? `<div class="kpi-row"><span>Exención vivienda habitual aplicada</span><span class="pos">${fmtEUR(patrimonio.exencionViviendaHabitual)}</span></div>` : ""}
+      <div class="kpi-row"><span>Base por contribuyente (÷2)</span><span>${fmtEUR(patrimonio.basePorSujeto)}</span></div>
+      <div class="kpi-row"><span>Mínimo exento por contribuyente</span><span>${fmtEUR(patrimonio.minimoExento)}</span></div>
+      <div class="kpi-row"><span>Base liquidable por contribuyente</span><span>${fmtEUR(patrimonio.baseLiquidablePorSujeto)}</span></div>
+      <div class="kpi-row"><span>Cuota íntegra por contribuyente</span><span>${fmtEUR(patrimonio.cuotaIntegraPorSujeto)}</span></div>
+      <div class="kpi-row"><span>Bonificación autonómica</span><span>${patrimonio.bonificacionPct}%</span></div>
+      <div class="kpi-row"><span>Cuota estimada por contribuyente</span><span>${fmtEUR(patrimonio.cuotaFinalPorSujeto)}</span></div>
+      <div class="kpi-row"><span><strong>Cuota estimada total (matrimonio)</strong></span><span><strong>${fmtEUR(patrimonio.cuotaFinalTotal)}</strong></span></div>
+      <p class="muted">Escala, mínimo exento y bonificación son los vigentes en Galicia, editables en Ajustes si cambia la normativa o tu residencia fiscal. No contempla el régimen transitorio del Impuesto Temporal de Solidaridad de las Grandes Fortunas, relevante solo para patrimonios muy elevados. No incluye la SL familiar (exenta por empresa familiar).</p>
     </section>
   `;
 

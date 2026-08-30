@@ -68,6 +68,12 @@ export function renderCatalog(container) {
                   <label>Precio de compra (€) <input name="purchasePrice" type="number" step="any" value="${editing?.purchasePrice ?? ""}" placeholder="Opcional" /></label>
                   <label>Fecha de adquisición <input name="acquisitionDate" type="date" value="${editing?.acquisitionDate || ""}" placeholder="Opcional" /></label>
                   <label class="checkbox-label"><input name="rented" type="checkbox" ${editing?.rented ? "checked" : ""} /> En rentabilidad (alquilado)</label>
+                  <label id="vivienda-habitual-field" style="display:none" class="checkbox-label">
+                    <input name="viviendaHabitual" type="checkbox" ${editing?.viviendaHabitual ? "checked" : ""} /> Es tu vivienda habitual
+                  </label>
+                  <label>Valor a efectos de Impuesto sobre Patrimonio (€)
+                    <input name="wealthTaxValue" type="number" step="any" value="${editing?.wealthTaxValue ?? ""}" placeholder="El mayor entre valor catastral, valor comprobado por la Administración y precio de compra" />
+                  </label>
                 </div>
                 <div class="btn-row">
                   <button type="submit">${editing ? "Guardar cambios" : "Añadir activo"}</button>
@@ -94,7 +100,7 @@ export function renderCatalog(container) {
                     <td>${ASSET_CLASSES[a.class]?.label || a.class}</td>
                     <td>${a.subclass || "—"}${a.class === "mixto" && a.mixRvPct != null ? ` (${a.mixRvPct}% RV / ${100 - a.mixRvPct}% RF)` : ""}${
                       a.class === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(a.subclass)
-                        ? ` <span class="muted">(compra ${fmtEUR(a.purchasePrice)}${a.acquisitionDate ? ` el ${a.acquisitionDate}` : ""}${a.rented ? " · en rentabilidad" : ""})</span>`
+                        ? ` <span class="muted">(compra ${fmtEUR(a.purchasePrice)}${a.acquisitionDate ? ` el ${a.acquisitionDate}` : ""}${a.rented ? " · en rentabilidad" : ""}${a.viviendaHabitual ? " · vivienda habitual" : ""}${a.wealthTaxValue ? ` · Patrimonio ${fmtEUR(a.wealthTaxValue)}` : ""})</span>`
                         : ""
                     }</td>
                     <td>${a.isin || "—"}</td>
@@ -117,6 +123,7 @@ export function renderCatalog(container) {
   const entitySelect = container.querySelector("#entity-select");
   const mixField = container.querySelector("#mix-field");
   const realEstateFields = container.querySelector("#real-estate-fields");
+  const viviendaHabitualField = container.querySelector("#vivienda-habitual-field");
   if (classSelect && subclassSelect) {
     function refreshSubclasses() {
       const opts = SUBCLASSES[classSelect.value] || [];
@@ -134,6 +141,8 @@ export function renderCatalog(container) {
       const isRealEstate = classSelect.value === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(subclassSelect.value);
       realEstateFields.style.display = isRealEstate ? "" : "none";
       entitySelect.required = !isRealEstate;
+      // Solo una "Vivienda" puede ser la habitual, no un Local/Oficina.
+      viviendaHabitualField.style.display = isRealEstate && subclassSelect.value === "Vivienda" ? "" : "none";
     }
     classSelect.addEventListener("change", () => {
       refreshSubclasses();
@@ -173,6 +182,8 @@ export function renderCatalog(container) {
       purchasePrice: isRealEstate && fd.get("purchasePrice") ? Number(fd.get("purchasePrice")) : null,
       acquisitionDate: isRealEstate && fd.get("acquisitionDate") ? fd.get("acquisitionDate") : null,
       rented: isRealEstate ? fd.get("rented") === "on" : false,
+      wealthTaxValue: isRealEstate && fd.get("wealthTaxValue") ? Number(fd.get("wealthTaxValue")) : null,
+      viviendaHabitual: isRealEstate && fd.get("subclass") === "Vivienda" ? fd.get("viviendaHabitual") === "on" : false,
     };
     if (editingAssetId) {
       store.updateAsset(editingAssetId, payload);
