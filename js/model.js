@@ -32,6 +32,17 @@ export const REAL_ESTATE_SUBCLASSES = ["Vivienda", "Local/Oficina"];
 
 export const DEFAULT_REAL_ESTATE_SAFETY_PCT = 10;
 
+// Tramos progresivos del IRPF sobre la base del ahorro (2025-2026). Se
+// guardan en meta para poder corregirlos desde Ajustes si cambia la
+// normativa, en vez de quedar fijos en el código.
+export const DEFAULT_TRAMOS_AHORRO = [
+  { hasta: 6000, pct: 19 },
+  { hasta: 50000, pct: 21 },
+  { hasta: 200000, pct: 23 },
+  { hasta: 300000, pct: 27 },
+  { hasta: null, pct: 30 },
+];
+
 export const MOVEMENT_TYPES = {
   aportacion: "Aportación",
   retirada: "Retirada",
@@ -52,6 +63,7 @@ export function emptyData() {
       benchmarkName: "Morningstar Global 60/40",
       benchmarkYtdPct: null,
       realEstateSafetyPct: DEFAULT_REAL_ESTATE_SAFETY_PCT,
+      tramosAhorro: DEFAULT_TRAMOS_AHORRO,
       version: 1,
     },
     entities: [],

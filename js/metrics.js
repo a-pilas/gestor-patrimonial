@@ -433,6 +433,69 @@ export function plusvaliaRealizadaVsLatente() {
   return { realizada, latente, total: realizada + latente };
 }
 
+// --- Fiscalidad ---
+
+// Ganancias/pérdidas patrimoniales REALIZADAS cuyo cierre (venta o retirada
+// completa del activo) cayó dentro de un año concreto — a diferencia de
+// plusvaliaRealizadaVsLatente(), que da el acumulado histórico sin partir
+// por año. Misma limitación: solo detecta activos vendidos/retirados del
+// TODO (sin posición actual); una venta parcial de un activo que sigues
+// manteniendo queda mezclada en su plusvalía latente.
+export function gananciasRealizadasEnAño(year) {
+  const data = store.get();
+  const latestByAsset = new Map();
+  for (const p of latestPositionsByAssetEntity()) latestByAsset.set(p.assetId, p);
+
+  let total = 0;
+  const detalle = [];
+  for (const asset of data.assets) {
+    if (latestByAsset.has(asset.id)) continue;
+    const exitMovs = data.movements.filter((m) => m.assetId === asset.id && (m.type === "venta" || m.type === "retirada"));
+    if (!exitMovs.length) continue;
+    const exitDate = exitMovs.reduce((max, m) => (m.date > max ? m.date : max), exitMovs[0].date);
+    if (Number(exitDate.slice(0, 4)) !== year) continue;
+    const ganancia = -aportadoNetoPorActivo(asset.id);
+    total += ganancia;
+    detalle.push({ asset, ganancia });
+  }
+  return { total, detalle };
+}
+
+export function dividendosEnAño(year) {
+  const data = store.get();
+  return data.movements
+    .filter((m) => m.type === "dividendo" && Number(m.date.slice(0, 4)) === year)
+    .reduce((s, m) => s + (Number(m.amount) || 0), 0);
+}
+
+export function comisionesEnAño(year) {
+  const data = store.get();
+  return data.movements
+    .filter((m) => m.type === "comision" && Number(m.date.slice(0, 4)) === year)
+    .reduce((s, m) => s + (Number(m.amount) || 0), 0);
+}
+
+// Cuota estimada de IRPF sobre la base del ahorro, aplicando tramos
+// progresivos (cada tramo tributa solo por la parte que le corresponde).
+// tramos: [{hasta: number|null, pct}] — hasta:null en un tramo cubre el
+// resto sin límite superior; se reordenan aquí por si no vienen ordenados.
+export function cuotaAhorroEstimada(base, tramos) {
+  if (!base || base <= 0 || !tramos?.length) return 0;
+  const ordenados = [...tramos].sort((a, b) => (a.hasta ?? Infinity) - (b.hasta ?? Infinity));
+  let cuota = 0;
+  let restante = base;
+  let desde = 0;
+  for (const t of ordenados) {
+    const hasta = t.hasta ?? Infinity;
+    const enTramo = Math.min(restante, hasta - desde);
+    if (enTramo > 0) cuota += enTramo * (Number(t.pct) / 100);
+    restante -= enTramo;
+    desde = hasta;
+    if (restante <= 0) break;
+  }
+  return cuota;
+}
+
 // Colchón de liquidez (cuentas corrientes + ahorro + depósitos) mes a mes,
 // desde el primer mes con alguna posición de liquidez hasta el actual —
 // mismo criterio de "última posición conocida hasta la fecha de corte" que

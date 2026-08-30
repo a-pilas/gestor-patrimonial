@@ -1,5 +1,6 @@
 import { store } from "./store.js";
 import { changePin, removePin } from "./lock.js";
+import { DEFAULT_TRAMOS_AHORRO } from "./model.js";
 
 export function renderSettings(container) {
   const data = store.get();
@@ -31,6 +32,16 @@ export function renderSettings(container) {
       </label>
       <p class="muted">Se aplica a todas las posiciones de inmuebles con varias fuentes de valoración, en todas las pantallas, al instante.</p>
       <button id="save-safety-pct">Guardar</button>
+    </section>
+
+    <section class="card">
+      <h3>Fiscalidad — Tramos IRPF del ahorro</h3>
+      <p class="muted">Se usan en la pestaña Fiscalidad para estimar la cuota sobre ganancias realizadas y dividendos. Deja "Hasta" en blanco en el tramo que cubre el resto sin límite superior. Ajústalos si cambia la normativa.</p>
+      <div id="tramos-rows"></div>
+      <button type="button" id="btn-add-tramo" class="link-btn">+ Añadir tramo</button>
+      <div class="btn-row" style="margin-top:10px">
+        <button id="save-tramos">Guardar tramos</button>
+      </div>
     </section>
 
     <section class="card">
@@ -85,6 +96,41 @@ export function renderSettings(container) {
       return;
     }
     store.updateMeta({ realEstateSafetyPct: pct });
+    alert("Guardado.");
+  });
+
+  const tramosRows = container.querySelector("#tramos-rows");
+
+  function renderTramoRow(t) {
+    const div = document.createElement("div");
+    div.className = "btn-row tramo-row";
+    div.innerHTML = `
+      <input class="tramo-hasta" type="number" step="any" min="0" placeholder="Hasta (€, vacío = sin límite)" value="${t.hasta ?? ""}" />
+      <input class="tramo-pct" type="number" step="any" min="0" max="100" placeholder="%" value="${t.pct ?? ""}" style="max-width:90px" />
+      <button type="button" class="link-btn danger tramo-remove">quitar</button>
+    `;
+    div.querySelector(".tramo-remove").addEventListener("click", () => div.remove());
+    tramosRows.appendChild(div);
+  }
+
+  (data.meta.tramosAhorro?.length ? data.meta.tramosAhorro : DEFAULT_TRAMOS_AHORRO).forEach(renderTramoRow);
+
+  container.querySelector("#btn-add-tramo").addEventListener("click", () => {
+    renderTramoRow({ hasta: "", pct: "" });
+  });
+
+  container.querySelector("#save-tramos").addEventListener("click", () => {
+    const tramos = [...tramosRows.querySelectorAll(".tramo-row")]
+      .map((row) => ({
+        hasta: row.querySelector(".tramo-hasta").value.trim() === "" ? null : Number(row.querySelector(".tramo-hasta").value),
+        pct: Number(row.querySelector(".tramo-pct").value),
+      }))
+      .filter((t) => !isNaN(t.pct));
+    if (!tramos.length) {
+      alert("Añade al menos un tramo con su porcentaje.");
+      return;
+    }
+    store.updateMeta({ tramosAhorro: tramos });
     alert("Guardado.");
   });
 

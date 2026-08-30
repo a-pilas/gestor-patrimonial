@@ -3,6 +3,7 @@ import { renderCatalog } from "./catalog.js";
 import { renderPositions } from "./positions.js";
 import { renderMovements } from "./movements.js";
 import { renderLiabilities } from "./liabilities.js";
+import { renderFiscal } from "./fiscal.js";
 import { renderSettings } from "./settings.js";
 import { ensureUnlocked } from "./lock.js";
 
@@ -12,6 +13,7 @@ const TABS = [
   { id: "inicio", label: "Inicio", render: renderDashboard },
   { id: "posiciones", label: "Posiciones", render: renderPositions },
   { id: "movimientos", label: "Movimientos", render: renderMovements },
+  { id: "fiscalidad", label: "Fiscalidad", render: renderFiscal },
   { id: "activos", label: "Activos", render: renderCatalog },
   { id: "deudas", label: "Deudas", render: renderLiabilities },
   { id: "ajustes", label: "Ajustes", render: renderSettings },
