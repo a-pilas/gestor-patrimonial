@@ -62,6 +62,15 @@ export const DEFAULT_TRAMOS_PATRIMONIO = [
   { hasta: null, pct: 3.5 },
 ];
 
+// Subclases con vencimiento propio (depósitos a plazo, bonos/obligaciones):
+// admiten una fecha de vencimiento para las alertas de la Fase 4.
+export const SUBCLASSES_CON_VENCIMIENTO = ["Depósito a plazo", "Bono/Obligación"];
+
+export const DEFAULT_DESVIACION_UMBRAL_PCT = 5;
+export const DEFAULT_CONCENTRACION_ACTIVO_UMBRAL_PCT = 20;
+export const DEFAULT_CONCENTRACION_ENTIDAD_UMBRAL_PCT = 40;
+export const DEFAULT_VENCIMIENTO_DIAS_AVISO = 30;
+
 export const MOVEMENT_TYPES = {
   aportacion: "Aportación",
   retirada: "Retirada",
@@ -86,6 +95,11 @@ export function emptyData() {
       patrimonioMinimoExento: DEFAULT_PATRIMONIO_MINIMO_EXENTO,
       patrimonioBonificacionPct: DEFAULT_PATRIMONIO_BONIFICACION_PCT,
       tramosPatrimonio: DEFAULT_TRAMOS_PATRIMONIO,
+      objetivoClase: { liquidez: 0, renta_fija: 0, mixto: 0, renta_variable: 0, inmobiliario: 0 },
+      desviacionUmbralPct: DEFAULT_DESVIACION_UMBRAL_PCT,
+      concentracionActivoUmbralPct: DEFAULT_CONCENTRACION_ACTIVO_UMBRAL_PCT,
+      concentracionEntidadUmbralPct: DEFAULT_CONCENTRACION_ENTIDAD_UMBRAL_PCT,
+      vencimientoDiasAviso: DEFAULT_VENCIMIENTO_DIAS_AVISO,
       version: 1,
     },
     entities: [],

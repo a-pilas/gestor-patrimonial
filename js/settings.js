@@ -1,6 +1,6 @@
 import { store } from "./store.js";
 import { changePin, removePin } from "./lock.js";
-import { DEFAULT_TRAMOS_AHORRO, DEFAULT_TRAMOS_PATRIMONIO } from "./model.js";
+import { ASSET_CLASSES, DEFAULT_TRAMOS_AHORRO, DEFAULT_TRAMOS_PATRIMONIO } from "./model.js";
 
 export function renderSettings(container) {
   const data = store.get();
@@ -59,6 +59,36 @@ export function renderSettings(container) {
       <div class="btn-row" style="margin-top:10px">
         <button id="save-patrimonio">Guardar</button>
       </div>
+    </section>
+
+    <section class="card">
+      <h3>Alertas y rebalanceo — Asignación objetivo</h3>
+      <p class="muted">% objetivo por clase (debería sumar 100%) y umbral de desviación para las alertas de la pestaña Alertas.</p>
+      ${Object.entries(ASSET_CLASSES)
+        .map(
+          ([k, c]) => `<label>${c.label} (%)
+            <input class="objetivo-clase" data-clase="${k}" type="number" step="any" min="0" max="100" value="${data.meta.objetivoClase?.[k] ?? 0}" />
+          </label>`
+        )
+        .join("")}
+      <label>Umbral de desviación (puntos porcentuales)
+        <input id="desviacion-umbral" type="number" step="any" min="0" value="${data.meta.desviacionUmbralPct}" />
+      </label>
+      <button id="save-objetivo-clase">Guardar</button>
+    </section>
+
+    <section class="card">
+      <h3>Alertas — Concentración y vencimientos</h3>
+      <label>Umbral de concentración por activo (%, sobre patrimonio financiero)
+        <input id="concentracion-activo-umbral" type="number" step="any" min="0" max="100" value="${data.meta.concentracionActivoUmbralPct}" />
+      </label>
+      <label>Umbral de concentración por entidad (%, sobre patrimonio financiero)
+        <input id="concentracion-entidad-umbral" type="number" step="any" min="0" max="100" value="${data.meta.concentracionEntidadUmbralPct}" />
+      </label>
+      <label>Días de aviso antes de un vencimiento (depósitos, bonos)
+        <input id="vencimiento-dias-aviso" type="number" step="1" min="0" value="${data.meta.vencimientoDiasAviso}" />
+      </label>
+      <button id="save-alertas-umbrales">Guardar</button>
     </section>
 
     <section class="card">
@@ -193,6 +223,32 @@ export function renderSettings(container) {
       return;
     }
     store.updateMeta({ patrimonioMinimoExento: minimoExento, patrimonioBonificacionPct: bonificacionPct, tramosPatrimonio: tramos });
+    alert("Guardado.");
+  });
+
+  container.querySelector("#save-objetivo-clase").addEventListener("click", () => {
+    const objetivoClase = {};
+    container.querySelectorAll(".objetivo-clase").forEach((input) => {
+      objetivoClase[input.dataset.clase] = Number(input.value) || 0;
+    });
+    const desviacionUmbralPct = Number(container.querySelector("#desviacion-umbral").value);
+    if (isNaN(desviacionUmbralPct) || desviacionUmbralPct < 0) {
+      alert("Introduce un umbral de desviación válido.");
+      return;
+    }
+    store.updateMeta({ objetivoClase, desviacionUmbralPct });
+    alert("Guardado.");
+  });
+
+  container.querySelector("#save-alertas-umbrales").addEventListener("click", () => {
+    const concentracionActivoUmbralPct = Number(container.querySelector("#concentracion-activo-umbral").value);
+    const concentracionEntidadUmbralPct = Number(container.querySelector("#concentracion-entidad-umbral").value);
+    const vencimientoDiasAviso = Number(container.querySelector("#vencimiento-dias-aviso").value);
+    if ([concentracionActivoUmbralPct, concentracionEntidadUmbralPct, vencimientoDiasAviso].some((n) => isNaN(n) || n < 0)) {
+      alert("Introduce valores válidos.");
+      return;
+    }
+    store.updateMeta({ concentracionActivoUmbralPct, concentracionEntidadUmbralPct, vencimientoDiasAviso });
     alert("Guardado.");
   });
 

@@ -1,4 +1,4 @@
-import { ASSET_CLASSES, SUBCLASSES, RISK_SCALE_MAX, REAL_ESTATE_SUBCLASSES } from "./model.js";
+import { ASSET_CLASSES, SUBCLASSES, RISK_SCALE_MAX, REAL_ESTATE_SUBCLASSES, SUBCLASSES_CON_VENCIMIENTO } from "./model.js";
 import { store } from "./store.js";
 
 function fmtEUR(n) {
@@ -75,6 +75,9 @@ export function renderCatalog(container) {
                     <input name="wealthTaxValue" type="number" step="any" value="${editing?.wealthTaxValue ?? ""}" placeholder="El mayor entre valor catastral, valor comprobado por la Administración y precio de compra" />
                   </label>
                 </div>
+                <label id="vencimiento-field" style="display:none">Fecha de vencimiento
+                  <input name="vencimiento" type="date" value="${editing?.vencimiento || ""}" />
+                </label>
                 <div class="btn-row">
                   <button type="submit">${editing ? "Guardar cambios" : "Añadir activo"}</button>
                   ${editing ? `<button type="button" id="cancel-edit-asset">Cancelar</button>` : ""}
@@ -102,7 +105,7 @@ export function renderCatalog(container) {
                       a.class === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(a.subclass)
                         ? ` <span class="muted">(compra ${fmtEUR(a.purchasePrice)}${a.acquisitionDate ? ` el ${a.acquisitionDate}` : ""}${a.rented ? " · en rentabilidad" : ""}${a.viviendaHabitual ? " · vivienda habitual" : ""}${a.wealthTaxValue ? ` · Patrimonio ${fmtEUR(a.wealthTaxValue)}` : ""})</span>`
                         : ""
-                    }</td>
+                    }${a.vencimiento ? ` <span class="muted">(vence ${a.vencimiento})</span>` : ""}</td>
                     <td>${a.isin || "—"}</td>
                     <td>${a.riskScore ?? "—"}</td>
                     <td>
@@ -124,6 +127,7 @@ export function renderCatalog(container) {
   const mixField = container.querySelector("#mix-field");
   const realEstateFields = container.querySelector("#real-estate-fields");
   const viviendaHabitualField = container.querySelector("#vivienda-habitual-field");
+  const vencimientoField = container.querySelector("#vencimiento-field");
   if (classSelect && subclassSelect) {
     function refreshSubclasses() {
       const opts = SUBCLASSES[classSelect.value] || [];
@@ -144,12 +148,19 @@ export function renderCatalog(container) {
       // Solo una "Vivienda" puede ser la habitual, no un Local/Oficina.
       viviendaHabitualField.style.display = isRealEstate && subclassSelect.value === "Vivienda" ? "" : "none";
     }
+    function refreshVencimientoField() {
+      vencimientoField.style.display = SUBCLASSES_CON_VENCIMIENTO.includes(subclassSelect.value) ? "" : "none";
+    }
     classSelect.addEventListener("change", () => {
       refreshSubclasses();
       refreshMixField();
       refreshRealEstateFields();
+      refreshVencimientoField();
     });
-    subclassSelect.addEventListener("change", refreshRealEstateFields);
+    subclassSelect.addEventListener("change", () => {
+      refreshRealEstateFields();
+      refreshVencimientoField();
+    });
     if (!editing) refreshSubclasses();
     else {
       // Aseguramos que las opciones de subclase correspondan a la clase ya seleccionada al editar
@@ -158,6 +169,7 @@ export function renderCatalog(container) {
     }
     refreshMixField();
     refreshRealEstateFields();
+    refreshVencimientoField();
   }
 
   container.querySelector("#form-entity").addEventListener("submit", (ev) => {
@@ -184,6 +196,7 @@ export function renderCatalog(container) {
       rented: isRealEstate ? fd.get("rented") === "on" : false,
       wealthTaxValue: isRealEstate && fd.get("wealthTaxValue") ? Number(fd.get("wealthTaxValue")) : null,
       viviendaHabitual: isRealEstate && fd.get("subclass") === "Vivienda" ? fd.get("viviendaHabitual") === "on" : false,
+      vencimiento: SUBCLASSES_CON_VENCIMIENTO.includes(fd.get("subclass")) && fd.get("vencimiento") ? fd.get("vencimiento") : null,
     };
     if (editingAssetId) {
       store.updateAsset(editingAssetId, payload);

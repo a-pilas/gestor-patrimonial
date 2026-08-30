@@ -632,3 +632,67 @@ export function evolucionMensualLiquidez() {
     momPct: i === 0 || !points[i - 1].total ? null : ((pt.total - points[i - 1].total) / points[i - 1].total) * 100,
   }));
 }
+
+// --- Fase 4: alertas y rebalanceo ---
+
+// Compara el reparto real por clase (totalsByClass, ya reparte los Mixtos
+// con % RV/RF definido) contra el % objetivo configurado en Ajustes, y
+// marca alerta cuando la desviación absoluta supera el umbral.
+export function desviacionAsignacion() {
+  const data = store.get();
+  const totals = totalsByClass();
+  const total = Object.values(totals).reduce((a, b) => a + b, 0);
+  const objetivo = data.meta.objetivoClase || {};
+  const umbral = Number(data.meta.desviacionUmbralPct) || 0;
+
+  return Object.keys(ASSET_CLASSES).map((cls) => {
+    const actualPct = total ? (totals[cls] / total) * 100 : 0;
+    const objetivoPct = Number(objetivo[cls]) || 0;
+    const desviacion = actualPct - objetivoPct;
+    return { cls, label: ASSET_CLASSES[cls].label, actualPct, objetivoPct, desviacion, alerta: Math.abs(desviacion) > umbral };
+  });
+}
+
+// Concentración por activo individual, solo sobre patrimonio FINANCIERO
+// (excluye inmobiliario, igual que financialBreakdownBySubclass): tener tu
+// vivienda no es un riesgo de concentración que se pueda rebalancear, así
+// que incluirla solo generaría ruido. No detecta concentración real por
+// emisor si un mismo valor está repartido entre varios fondos — eso
+// requiere un análisis look-through, todavía no implementado.
+export function concentracionPorActivo() {
+  const { total } = financialBreakdownBySubclass();
+  const umbral = Number(store.get().meta.concentracionActivoUmbralPct) || 0;
+
+  return financialPositions()
+    .map(({ p, asset }) => {
+      const value = valueOfPosition(p);
+      return { asset, value, pct: total ? (value / total) * 100 : 0 };
+    })
+    .filter((r) => r.pct > umbral)
+    .sort((a, b) => b.pct - a.pct);
+}
+
+// Concentración por entidad custodia, sobre el mismo patrimonio financiero
+// que financialTotalsByEntity() (excluye inmobiliario).
+export function concentracionPorEntidad() {
+  const { rows, total } = financialTotalsByEntity();
+  const umbral = Number(store.get().meta.concentracionEntidadUmbralPct) || 0;
+  return rows.map((r) => ({ ...r, pct: total ? (r.value / total) * 100 : 0 })).filter((r) => r.pct > umbral);
+}
+
+// Depósitos a plazo y bonos/obligaciones con vencimiento dentro de los
+// próximos N días configurados (o ya vencidos), entre los que sigues
+// manteniendo (con posición actual). Se ordenan por más urgente primero.
+export function vencimientosProximos() {
+  const data = store.get();
+  const diasAviso = Number(data.meta.vencimientoDiasAviso) || 0;
+  const hoy = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00");
+  const latestByAsset = new Map();
+  for (const p of latestPositionsByAssetEntity()) latestByAsset.set(p.assetId, p);
+
+  return data.assets
+    .filter((a) => a.vencimiento && latestByAsset.has(a.id))
+    .map((a) => ({ asset: a, dias: Math.round((new Date(a.vencimiento + "T00:00:00") - hoy) / 86400000) }))
+    .filter((r) => r.dias <= diasAviso)
+    .sort((a, b) => a.dias - b.dias);
+}
