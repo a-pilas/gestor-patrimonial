@@ -1,5 +1,5 @@
 import { store } from "./store.js";
-import { gananciasRealizadasEnAño, dividendosEnAño, comisionesEnAño, cuotaProgresiva, cuotaPatrimonioEstimada } from "./metrics.js";
+import { gananciasRealizadasEnAño, dividendosEnAño, comisionesEnAño, cuotaProgresiva, cuotaPatrimonioEstimada, simulacionVenderTodoHoy } from "./metrics.js";
 
 // Recuerda el año seleccionado entre renders (p.ej. al volver a esta pestaña).
 let selectedYear = null;
@@ -31,6 +31,8 @@ export function renderFiscal(container) {
   const tramosOrdenados = [...tramos].sort((a, b) => (a.hasta ?? Infinity) - (b.hasta ?? Infinity));
 
   const patrimonio = cuotaPatrimonioEstimada();
+  const currentYear = new Date().getFullYear();
+  const simulacion = simulacionVenderTodoHoy(currentYear);
 
   container.innerHTML = `
     <div class="section-head">
@@ -78,6 +80,17 @@ export function renderFiscal(container) {
           : ""
       }
       <p class="muted">Tramos usados: ${tramosOrdenados.map((t) => `${t.hasta ? "hasta " + fmtEUR(t.hasta) : "resto"} al ${t.pct}%`).join(" · ")}. Ajústalos en Ajustes si cambia la normativa.</p>
+    </section>
+
+    <section class="card">
+      <h3>¿Y si vendo todo hoy?</h3>
+      <p class="muted">Coste fiscal incremental de materializar hoy toda tu plusvalía latente (todo lo que sigues manteniendo), sumada a lo ya realizado en ${currentYear} — no aislada, porque los tramos son progresivos y lo que ya llevas realizado este año condiciona el tramo en el que caería esa nueva ganancia.</p>
+      <div class="kpi-row"><span>Plusvalía latente total (si se vendiera todo)</span><span class="${simulacion.latente >= 0 ? "pos" : "neg"}">${fmtEUR(simulacion.latente)}</span></div>
+      <div class="kpi-row"><span>Ya realizado en ${currentYear} (ganancias + dividendos)</span><span>${fmtEUR(simulacion.yaRealizadoEsteAño)}</span></div>
+      <div class="kpi-row"><span>Cuota ya debida por lo realizado</span><span>${fmtEUR(simulacion.cuotaYaDebida)}</span></div>
+      <div class="kpi-row"><span>Cuota si vendieras todo hoy</span><span>${fmtEUR(simulacion.cuotaSiVendieraTodo)}</span></div>
+      <div class="kpi-row"><span><strong>${simulacion.costeIncremental >= 0 ? "Coste incremental de vender todo" : "Ahorro de cuota al compensar pérdidas"}</strong></span><span class="${simulacion.costeIncremental >= 0 ? "neg" : "pos"}"><strong>${fmtEUR(Math.abs(simulacion.costeIncremental))}</strong></span></div>
+      <p class="muted">No incluye gastos específicos de venta de inmuebles (notaría, plusvalía municipal...) ni los límites reales de compensación de pérdidas entre categorías de renta.</p>
     </section>
 
     <section class="card">

@@ -562,6 +562,29 @@ export function cuotaPatrimonioEstimada() {
   };
 }
 
+// Simulador "¿y si vendo todo hoy?": parte de la plusvalía latente total
+// (todo lo que sigues manteniendo, si se materializara íntegra hoy) y estima
+// el coste fiscal INCREMENTAL de hacerlo — no aislado, sino sumado a lo que
+// ya llevas realizado este año (ganancias + dividendos) — porque los tramos
+// del ahorro son progresivos y el coste real de una nueva ganancia depende
+// de en qué tramo te deja lo que ya has realizado. Si la latente es negativa
+// (más pérdidas que ganancias en lo que mantienes), el resultado puede salir
+// negativo: significaría ahorro de cuota, no coste, al compensar pérdidas
+// contra lo ya realizado. No contempla gastos/deducciones específicos de la
+// venta de inmuebles (notaría, plusvalía municipal...) ni límites reales de
+// compensación de pérdidas entre categorías.
+export function simulacionVenderTodoHoy(year) {
+  const data = store.get();
+  const { latente } = plusvaliaRealizadaVsLatente();
+  const yaRealizadoEsteAño = gananciasRealizadasEnAño(year).total + dividendosEnAño(year);
+  const tramos = data.meta.tramosAhorro || [];
+
+  const cuotaYaDebida = cuotaProgresiva(Math.max(0, yaRealizadoEsteAño), tramos);
+  const cuotaSiVendieraTodo = cuotaProgresiva(Math.max(0, yaRealizadoEsteAño + latente), tramos);
+
+  return { latente, yaRealizadoEsteAño, cuotaYaDebida, cuotaSiVendieraTodo, costeIncremental: cuotaSiVendieraTodo - cuotaYaDebida };
+}
+
 // Colchón de liquidez (cuentas corrientes + ahorro + depósitos) mes a mes,
 // desde el primer mes con alguna posición de liquidez hasta el actual —
 // mismo criterio de "última posición conocida hasta la fecha de corte" que
