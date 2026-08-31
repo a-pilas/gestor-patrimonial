@@ -4,6 +4,8 @@ import { aportadoNetoPorActivo, valueOfPosition } from "./metrics.js";
 import { openModal } from "./modal.js";
 
 let bulkMode = false;
+let showZeroPositions = false;
+let historyYearFilter = "todos";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -34,7 +36,7 @@ export function renderPositions(container) {
 
   const sorted = [...data.positions].sort((a, b) => (a.date < b.date ? 1 : -1));
 
-  const resumenRows = data.assets
+  const resumenRowsAll = data.assets
     .map((a) => {
       const latest = latestPositionsByAssetEntity().find((p) => p.assetId === a.id);
       const valorActual = latest ? valueOfPosition(latest) : null;
@@ -47,6 +49,17 @@ export function renderPositions(container) {
       if (entityCmp !== 0) return entityCmp;
       return a.asset.name.localeCompare(b.asset.name, "es");
     });
+
+  // Un activo con valor actual a 0€ significa que se traspasó/vendió del
+  // todo (ver invariante Posiciones vs. Movimientos): se sigue conservando
+  // el dato, pero por defecto se oculta de "lo que tengo en cartera" para
+  // no distorsionar la vista — un enlace lo despliega ocasionalmente.
+  const resumenRowsZero = resumenRowsAll.filter((r) => r.valorActual != null && r.valorActual <= 0);
+  const resumenRows = showZeroPositions ? resumenRowsAll : resumenRowsAll.filter((r) => r.valorActual == null || r.valorActual > 0);
+
+  const historyYears = [...new Set(data.positions.map((p) => p.date.slice(0, 4)))].sort((a, b) => b.localeCompare(a));
+  const filteredSorted = historyYearFilter === "todos" ? sorted : sorted.filter((p) => p.date.slice(0, 4) === historyYearFilter);
+  const { altas, bajas } = historyYearFilter === "todos" ? { altas: [], bajas: [] } : altasBajasEnAnio(data, historyYearFilter);
 
   container.innerHTML = `
     <div class="section-head">
@@ -66,7 +79,7 @@ export function renderPositions(container) {
             ${
               resumenRows
                 .map(
-                  (r) => `<tr>
+                  (r) => `<tr${r.valorActual != null && r.valorActual <= 0 ? ' class="row-zero"' : ""}>
                     <td>${r.asset.name}</td>
                     <td>${entityName(r.asset.entityId)}</td>
                     <td>${fmtEUR(r.aportado)}</td>
@@ -79,16 +92,34 @@ export function renderPositions(container) {
           </tbody>
         </table>
       </div>
+      ${
+        resumenRowsZero.length
+          ? `<button type="button" id="btn-toggle-zero" class="link-btn">${showZeroPositions ? "Ocultar posiciones a cero" : `Ver también posiciones a cero (${resumenRowsZero.length})`}</button>`
+          : ""
+      }
     </section>
 
     <section class="card">
-      <h3>Histórico de posiciones</h3>
+      <div class="section-head">
+        <h3>Histórico de posiciones</h3>
+        <select id="history-year-filter">
+          <option value="todos" ${historyYearFilter === "todos" ? "selected" : ""}>Todos los años</option>
+          ${historyYears.map((y) => `<option value="${y}" ${y === historyYearFilter ? "selected" : ""}>${y}</option>`).join("")}
+        </select>
+      </div>
+      ${
+        historyYearFilter !== "todos"
+          ? `<p class="muted">En ${historyYearFilter}: ${altas.length} activo${altas.length === 1 ? "" : "s"} nuevo${altas.length === 1 ? "" : "s"}${
+              altas.length ? ` (${altas.map((a) => a.name).join(", ")})` : ""
+            } · ${bajas.length} dado${bajas.length === 1 ? "" : "s"} de baja${bajas.length ? ` (${bajas.map((a) => a.name).join(", ")})` : ""}</p>`
+          : ""
+      }
       <div class="table-wrap">
         <table class="table table-history">
           <thead><tr><th>Fecha</th><th>Entidad</th><th>Activo</th><th>Unidades</th><th>Valor</th><th></th></tr></thead>
           <tbody>
             ${
-              sorted
+              filteredSorted
                 .map((p) => {
                   const asset = assetById(p.assetId);
                   return `<tr>
@@ -103,7 +134,8 @@ export function renderPositions(container) {
                     </td>
                   </tr>`;
                 })
-                .join("") || '<tr><td colspan="6" class="muted">Sin posiciones todavía</td></tr>'
+                .join("") ||
+              `<tr><td colspan="6" class="muted">${historyYearFilter === "todos" ? "Sin posiciones todavía" : `Sin posiciones en ${historyYearFilter}`}</td></tr>`
             }
           </tbody>
         </table>
@@ -257,6 +289,16 @@ export function renderPositions(container) {
     });
   }
 
+  container.querySelector("#btn-toggle-zero")?.addEventListener("click", () => {
+    showZeroPositions = !showZeroPositions;
+    renderPositions(container);
+  });
+
+  container.querySelector("#history-year-filter").addEventListener("change", (ev) => {
+    historyYearFilter = ev.target.value;
+    renderPositions(container);
+  });
+
   container.querySelector("#btn-bulk-update").addEventListener("click", () => {
     bulkMode = true;
     renderPositions(container);
@@ -289,18 +331,47 @@ function isRealEstateAsset(a) {
   return a.class === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(a.subclass);
 }
 
+// Altas (primera posición registrada ese año) y bajas (última posición
+// registrada ese año, y es una posición a 0€ — el criterio ya establecido
+// para "traspasado/vendido del todo") de un año concreto.
+function altasBajasEnAnio(data, year) {
+  const altas = [];
+  const bajas = [];
+  for (const asset of data.assets) {
+    const posiciones = data.positions.filter((p) => p.assetId === asset.id);
+    if (!posiciones.length) continue;
+    const fechas = [...posiciones.map((p) => p.date)].sort();
+    const primera = fechas[0];
+    const ultima = fechas[fechas.length - 1];
+    if (primera.slice(0, 4) === year) altas.push(asset);
+    if (ultima.slice(0, 4) === year) {
+      const ultimaPos = posiciones.find((p) => p.date === ultima);
+      if (valueOfPosition(ultimaPos) <= 0) bajas.push(asset);
+    }
+  }
+  return { altas, bajas };
+}
+
 function renderBulkUpdate(container, data) {
   const assetById = (id) => data.assets.find((a) => a.id === id);
   const entityName = (id) => data.entities.find((e) => e.id === id)?.name || "—";
-
-  const simpleAssets = data.assets.filter((a) => !isRealEstateAsset(a));
-  const realEstateAssets = data.assets.filter(isRealEstateAsset);
 
   const latestPosByAsset = new Map();
   for (const p of [...data.positions].sort((a, b) => (a.date < b.date ? -1 : 1))) {
     latestPosByAsset.set(p.assetId, p);
   }
   const latestLiabPos = new Map(latestLiabilityPositions().map((p) => [p.liabilityId, p]));
+
+  // Un activo con última posición a 0€ ya se traspasó/vendió del todo: no
+  // tiene sentido ofrecerlo en la actualización mensual (nada que
+  // actualizar). Si algún día hiciera falta reactivarlo, se usa el "+ Nueva
+  // posición" individual, que sí lista todos los activos sin filtrar.
+  const estaZeroed = (a) => {
+    const latest = latestPosByAsset.get(a.id);
+    return latest && valueOfPosition(latest) <= 0;
+  };
+  const simpleAssets = data.assets.filter((a) => !isRealEstateAsset(a) && !estaZeroed(a));
+  const realEstateAssets = data.assets.filter((a) => isRealEstateAsset(a) && !estaZeroed(a));
 
   function valuationRowHtml(v) {
     return `<div class="btn-row bulk-re-source-row">

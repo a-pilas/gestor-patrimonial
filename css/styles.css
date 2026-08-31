@@ -171,6 +171,8 @@ body {
 .tramo-row { align-items: center; margin-bottom: 8px; }
 .tramo-row input { flex: 1; min-width: 0; }
 
+.row-zero { color: var(--muted); }
+
 @media (max-width: 560px) {
   .bulk-row { flex-direction: column; align-items: stretch; }
   .bulk-row input { width: 100%; }

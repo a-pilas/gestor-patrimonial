@@ -1,4 +1,4 @@
-const CACHE = "gestor-patrimonial-v28";
+const CACHE = "gestor-patrimonial-v29";
 const ASSETS = [
   "./",
   "./index.html",
