@@ -677,6 +677,49 @@ export function simulacionVenderTodoHoy(year) {
   return { latente, yaRealizadoEsteAño, cuotaYaDebida, cuotaSiVendieraTodo, costeIncremental: cuotaSiVendieraTodo - cuotaYaDebida };
 }
 
+// Subclases que forman el bloque "liquidez" en patrimonioConsolidado() —
+// se repite aquí para poder recalcular el mismo reparto mes a mes (Monetario
+// se agrupa con fondos/ETF en financialBreakdownBySubclass, no aquí).
+const LIQUIDEZ_CONSOLIDADA_SUBCLASSES = ["Cuenta corriente", "Cuenta remunerada", "Depósito a plazo"];
+
+// Evolución mensual del patrimonio consolidado (liquidez / inversión
+// financiera / inmobiliario / total) desde enero del año en curso hasta el
+// mes actual — mismo criterio de "última posición conocida hasta la fecha
+// de corte" que evolucionAnualPatrimonio()/evolucionMensualLiquidez(), pero
+// con los 3 bloques de patrimonioConsolidado() en vez de un único total.
+export function evolucionMensualConsolidada() {
+  const data = store.get();
+  const now = new Date();
+  const year = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
+  const months = [];
+  for (let m = 1; m <= currentMonth; m++) months.push(`${year}-${String(m).padStart(2, "0")}`);
+
+  return months.map((monthKey) => {
+    const cutoff = `${monthKey}-31`;
+    const map = new Map();
+    for (const p of data.positions) {
+      if (p.date > cutoff) continue;
+      const key = p.entityId + "|" + p.assetId;
+      const prev = map.get(key);
+      if (!prev || p.date >= prev.date) map.set(key, p);
+    }
+    let liquidez = 0;
+    let inversionFinanciera = 0;
+    let inmobiliario = 0;
+    for (const p of map.values()) {
+      const asset = assetById(p.assetId);
+      if (!asset) continue;
+      const value = valueOfPosition(p);
+      if (asset.class === "inmobiliario") inmobiliario += value;
+      else if (LIQUIDEZ_CONSOLIDADA_SUBCLASSES.includes(asset.subclass)) liquidez += value;
+      else inversionFinanciera += value;
+    }
+    return { month: monthKey, liquidez, inversionFinanciera, inmobiliario, total: liquidez + inversionFinanciera + inmobiliario };
+  });
+}
+
 // Colchón de liquidez (cuentas corrientes + ahorro + depósitos) mes a mes,
 // desde el primer mes con alguna posición de liquidez hasta el actual —
 // mismo criterio de "última posición conocida hasta la fecha de corte" que

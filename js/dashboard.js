@@ -18,6 +18,7 @@ import {
   bandasDeRiesgo,
   plusvaliaRealizadaVsLatente,
   evolucionMensualLiquidez,
+  evolucionMensualConsolidada,
 } from "./metrics.js";
 
 const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -251,6 +252,93 @@ function evolutionChartCard() {
   `;
 }
 
+// Gráfico de líneas YTD (enero a mes actual) con el Total consolidado como
+// protagonista visual (línea gruesa + área rellena con degradado) y las 3
+// líneas de liquidez/inversión financiera/inmobiliario como trazos finos y
+// más apagados en segundo plano — el ojo debe irse primero al Total.
+function consolidatedEvolutionSvg(points) {
+  const width = 700;
+  const height = 260;
+  const marginLeft = 8;
+  const marginRight = 8;
+  const marginTop = 24;
+  const marginBottom = 30;
+  const plotWidth = width - marginLeft - marginRight;
+  const plotHeight = height - marginTop - marginBottom;
+  const maxValue = Math.max(...points.map((p) => p.total), 1);
+
+  const xFor = (i) => marginLeft + (points.length === 1 ? plotWidth / 2 : (i / (points.length - 1)) * plotWidth);
+  const yFor = (v) => marginTop + plotHeight - (v / maxValue) * plotHeight;
+
+  const lineFor = (key) => points.map((p, i) => `${xFor(i)},${yFor(p[key])}`).join(" ");
+
+  const totalLinePoints = lineFor("total");
+  const areaPath =
+    `M ${xFor(0)},${marginTop + plotHeight} ` +
+    points.map((p, i) => `L ${xFor(i)},${yFor(p.total)}`).join(" ") +
+    ` L ${xFor(points.length - 1)},${marginTop + plotHeight} Z`;
+
+  const last = points[points.length - 1];
+  const lastX = xFor(points.length - 1);
+
+  const monthLabels = points
+    .map((p, i) => {
+      const [, m] = p.month.split("-");
+      return `<text x="${xFor(i)}" y="${height - 8}" text-anchor="middle" class="evo-line-month">${MESES_CORTOS[Number(m) - 1]}</text>`;
+    })
+    .join("");
+
+  return `
+    <svg viewBox="0 0 ${width} ${height}" class="evo-line-chart" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="evoTotalGradient" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.35" />
+          <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      <polyline points="${lineFor("liquidez")}" fill="none" stroke="${COLOR_LIQUIDEZ}" stroke-width="1.5" opacity="0.85" />
+      <polyline points="${lineFor("inversionFinanciera")}" fill="none" stroke="${COLOR_INVERTIDO}" stroke-width="1.5" opacity="0.85" />
+      <polyline points="${lineFor("inmobiliario")}" fill="none" stroke="${COLOR_INMOBILIARIO}" stroke-width="1.5" opacity="0.85" />
+      <path d="${areaPath}" fill="url(#evoTotalGradient)" />
+      <polyline points="${totalLinePoints}" fill="none" stroke="var(--accent)" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round" />
+      <circle cx="${lastX}" cy="${yFor(last.total)}" r="4" fill="var(--accent)" />
+      <text x="${lastX}" y="${yFor(last.total) - 10}" text-anchor="end" class="evo-line-total-label">${fmtEUR(last.total)}</text>
+      ${monthLabels}
+    </svg>
+  `;
+}
+
+function evolutionYtdCard() {
+  const points = evolucionMensualConsolidada();
+  if (points.length < 2) {
+    return `
+      <section class="card">
+        <h3>Evolución del patrimonio YTD</h3>
+        <p class="muted">Necesitas posiciones de al menos dos meses distintos este año para ver la evolución.</p>
+      </section>
+    `;
+  }
+
+  const last = points[points.length - 1];
+  const entries = [
+    { label: "Liquidez", value: last.liquidez, color: COLOR_LIQUIDEZ },
+    { label: "Inversión financiera", value: last.inversionFinanciera, color: COLOR_INVERTIDO },
+    { label: "Inmobiliario", value: last.inmobiliario, color: COLOR_INMOBILIARIO },
+  ];
+
+  return `
+    <section class="card">
+      <h3>Evolución del patrimonio YTD</h3>
+      <p class="muted">Enero a mes actual, mes a mes. El Total destaca en el gráfico; las 3 líneas finas son cada bloque por separado.</p>
+      ${consolidatedEvolutionSvg(points)}
+      <div class="legend">
+        ${legendRow("var(--accent)", "Total", last.total, 100)}
+        ${entries.map((e) => legendRow(e.color, e.label, e.value, last.total ? (e.value / last.total) * 100 : 0)).join("")}
+      </div>
+    </section>
+  `;
+}
+
 // Plusvalía realizada (activos ya vendidos/retirados del todo) vs. latente
 // (lo que sigues manteniendo). Con KPIs en vez de barra apilada porque
 // cualquiera de las dos puede ser negativa (una pérdida), y una barra
@@ -460,6 +548,8 @@ export function renderDashboard(container) {
     </div>
 
     ${evolutionChartCard()}
+
+    ${evolutionYtdCard()}
 
     ${financialBreakdownTable()}
 
