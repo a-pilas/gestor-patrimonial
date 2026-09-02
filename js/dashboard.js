@@ -4,7 +4,8 @@ import {
   totalsByClass,
   totalPatrimonio,
   totalAportadoNeto,
-  rentabilidadYtdPct,
+  rentabilidadYtdInversionFinancieraPct,
+  rentabilidadYtdInmobiliarioPct,
   riskScores,
   fechaUltimaActualizacion,
   assetsWithoutPosition,
@@ -533,7 +534,8 @@ export function renderDashboard(container) {
   const total = totalPatrimonio();
   const aportado = totalAportadoNeto();
   const plusvalia = total - aportado;
-  const ytd = rentabilidadYtdPct();
+  const ytd = rentabilidadYtdInversionFinancieraPct();
+  const ytdInmobiliario = rentabilidadYtdInmobiliarioPct();
   const benchmarkYtd = data.meta.benchmarkYtdPct;
   const risks = riskScores();
   const lastUpdate = fechaUltimaActualizacion();
@@ -587,10 +589,11 @@ export function renderDashboard(container) {
       </section>
 
       <section class="card card-ytd">
-        <h3>Rentabilidad YTD vs benchmark</h3>
+        <h3>Rentabilidad YTD — Inversión financiera</h3>
+        <p class="muted">TWR (Time-Weighted Return): encadena un periodo por cada actualización de posiciones, para que las aportaciones no distorsionen la rentabilidad de mercado. Excluye cuentas corrientes e inmobiliario — la liquidez operativa no tiene "rentabilidad" y mezclarla distorsiona el cálculo.</p>
         <div class="ytd-compare">
           <div class="ytd-box">
-            <span class="ytd-label">Cartera</span>
+            <span class="ytd-label">Inversión financiera</span>
             <span class="ytd-value ${ytd >= 0 ? "pos" : "neg"}">${fmtPct(ytd)}</span>
           </div>
           <div class="ytd-box">
@@ -598,8 +601,11 @@ export function renderDashboard(container) {
             <span class="ytd-value">${fmtPct(benchmarkYtd)}</span>
             <button id="edit-benchmark" class="link-btn">editar</button>
           </div>
+          <div class="ytd-box">
+            <span class="ytd-label">Inmobiliario</span>
+            <span class="ytd-value ${ytdInmobiliario >= 0 ? "pos" : "neg"}">${fmtPct(ytdInmobiliario)}</span>
+          </div>
         </div>
-        <p class="muted">TWR (Time-Weighted Return): encadena un periodo por cada actualización de posiciones, para que las aportaciones no distorsionen la rentabilidad de mercado.</p>
       </section>
 
       <section class="card card-risk">

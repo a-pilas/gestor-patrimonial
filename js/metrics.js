@@ -90,69 +90,118 @@ function valorTotalHasta(cutoff) {
   return total;
 }
 
-// Flujo neto de capital dentro de un rango de fechas [desde, hasta] (ambos
-// incluidos, formato YYYY-MM-DD): Movimientos de aportación/traspaso/compra
-// suman, retirada/venta restan — igual que en el resto de la app — más el
-// precio de compra de cualquier inmueble cuya fecha de adquisición caiga en
-// ese rango (que no es un Movimiento, así que hay que sumarlo aparte).
-function flujoNetoEntre(desde, hasta) {
-  const data = store.get();
-  let flujo = 0;
-  for (const m of data.movements) {
-    if (m.date < desde || m.date > hasta) continue;
-    if (m.type === "aportacion" || m.type === "traspaso" || m.type === "compra") flujo += Number(m.amount) || 0;
-    if (m.type === "retirada" || m.type === "venta") flujo -= Number(m.amount) || 0;
-  }
-  for (const a of data.assets) {
-    if (a.acquisitionDate && a.acquisitionDate >= desde && a.acquisitionDate <= hasta) {
-      flujo += purchasePriceAsAportado(a);
-    }
-  }
-  return flujo;
-}
-
 function diaSiguiente(dateStr) {
   const d = new Date(dateStr + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() + 1);
   return d.toISOString().slice(0, 10);
 }
 
-// Rentabilidad YTD por TWR (Time-Weighted Return) real: encadena un
-// sub-periodo por cada fecha del año en curso en la que de verdad se
-// registró alguna posición nueva — en vez de tratar todo el año como un
-// único periodo (método Dietz de antes), o forzar un corte artificial cada
-// mes natural aunque no haya datos ese mes. Cada sub-periodo usa Dietz
-// modificado: r = (valorFin - valorInicio - flujoDelPeriodo) / valorInicio,
-// y el resultado final es el producto encadenado de (1+r) de cada
-// sub-periodo, menos 1.
+// Filtros de bloque, coherentes con patrimonioConsolidado()/
+// evolucionMensualConsolidada(): "inversión financiera" es lo financiero
+// que no es liquidez operativa (cuenta corriente/ahorro/depósito) ni
+// inmobiliario.
+function esInversionFinanciera(asset) {
+  return asset.class !== "inmobiliario" && !LIQUIDEZ_CONSOLIDADA_SUBCLASSES.includes(asset.subclass);
+}
+function esInmobiliarioAsset(asset) {
+  return asset.class === "inmobiliario";
+}
+
+// Valor de un subconjunto de activos (según assetFilter) en o antes de una
+// fecha de corte — misma lógica que valorTotalHasta() pero acotada a un
+// bloque concreto, para poder calcular su TWR por separado.
+function valorFiltradoHasta(cutoff, assetFilter) {
+  const data = store.get();
+  const map = new Map();
+  for (const p of data.positions) {
+    if (p.date > cutoff) continue;
+    const asset = assetById(p.assetId);
+    if (!asset || !assetFilter(asset)) continue;
+    const key = p.entityId + "|" + p.assetId;
+    const prev = map.get(key);
+    if (!prev || p.date >= prev.date) map.set(key, p);
+  }
+  let total = 0;
+  for (const p of map.values()) total += valueOfPosition(p);
+  return total;
+}
+
+// Flujo neto de capital dentro de [desde, hasta] (ambos incluidos), acotado
+// a los movimientos/adquisiciones de un bloque concreto (assetFilter) — los
+// movimientos sin activo asociado (aportación/retirada de "efectivo
+// genérico") no se pueden atribuir a un bloque, así que quedan fuera.
+function flujoNetoEntreFiltrado(desde, hasta, assetFilter) {
+  const data = store.get();
+  let flujo = 0;
+  for (const m of data.movements) {
+    if (m.date < desde || m.date > hasta) continue;
+    if (!m.assetId) continue;
+    const asset = assetById(m.assetId);
+    if (!asset || !assetFilter(asset)) continue;
+    if (m.type === "aportacion" || m.type === "traspaso" || m.type === "compra") flujo += Number(m.amount) || 0;
+    if (m.type === "retirada" || m.type === "venta") flujo -= Number(m.amount) || 0;
+  }
+  for (const a of data.assets) {
+    if (!assetFilter(a)) continue;
+    if (a.acquisitionDate && a.acquisitionDate >= desde && a.acquisitionDate <= hasta) {
+      flujo += purchasePriceAsAportado(a); // 0 si no es un inmueble físico
+    }
+  }
+  return flujo;
+}
+
+// Rentabilidad YTD por TWR (Time-Weighted Return) real de un bloque
+// concreto (assetFilter): encadena un sub-periodo por cada fecha del año en
+// curso en la que de verdad se registró una posición nueva DE ESE BLOQUE —
+// en vez de tratar todo el año como un único periodo (método Dietz de
+// antes), o forzar un corte artificial cada mes natural aunque no haya
+// datos ese mes. Cada sub-periodo usa Dietz modificado: r = (valorFin -
+// valorInicio - flujoDelPeriodo) / valorInicio, y el resultado final es el
+// producto encadenado de (1+r) de cada sub-periodo, menos 1.
 //
 // Cortar solo en fechas con datos reales es importante: un corte en un mes
 // sin ninguna posición nueva trataría cualquier aportación de ese mes como
 // dinero "desaparecido" (no hay valor que la respalde todavía), inflando
-// una caída ficticia seguida de una subida ficticia al mes siguiente. Al
-// cortar solo donde hay información nueva, con pocos datos el cálculo
-// degenera exactamente al método de un solo periodo (sin perder precisión),
-// y gana precisión cuanto más a menudo actualices tus posiciones.
-export function rentabilidadYtdPct() {
+// una caída ficticia seguida de una subida ficticia al mes siguiente.
+//
+// Acotar a un bloque es igual de importante: la cuenta corriente no tiene
+// "rentabilidad" — su saldo sube y baja por nómina, gastos, etc. que casi
+// nunca se registran como Movimientos uno a uno, así que si se incluyera en
+// el cálculo esos vaivenes se leerían como ganancias o pérdidas de mercado,
+// distorsionando el resultado (incluso hasta hacerlo matemáticamente
+// absurdo, por debajo de -100%). Por eso el TWR se calcula por separado
+// para inversión financiera e inmobiliario, y nunca sobre la liquidez.
+function calcularTwrAño(assetFilter) {
   const now = new Date();
   const year = now.getFullYear();
   const todayIso = now.toISOString().slice(0, 10);
   const startOfYear = `${year}-01-01`;
+  const finAnioAnterior = `${year - 1}-12-31`;
 
-  const valorInicioAño = valorTotalHasta(`${year - 1}-12-31`);
+  const valorInicioAño = valorFiltradoHasta(finAnioAnterior, assetFilter);
   if (!valorInicioAño) return null; // sin histórico suficiente
 
   const data = store.get();
-  const fechas = [...new Set(data.positions.map((p) => p.date).filter((d) => d >= startOfYear && d <= todayIso))].sort();
+  const fechas = [
+    ...new Set(
+      data.positions
+        .filter((p) => {
+          const a = assetById(p.assetId);
+          return a && assetFilter(a);
+        })
+        .map((p) => p.date)
+        .filter((d) => d >= startOfYear && d <= todayIso)
+    ),
+  ].sort();
   if (fechas[fechas.length - 1] !== todayIso) fechas.push(todayIso);
 
   let cumFactor = 1;
-  let prevDate = `${year - 1}-12-31`;
+  let prevDate = finAnioAnterior;
   let prevValue = valorInicioAño;
 
   for (const d of fechas) {
-    const valorFin = valorTotalHasta(d);
-    const flujo = flujoNetoEntre(diaSiguiente(prevDate), d);
+    const valorFin = valorFiltradoHasta(d, assetFilter);
+    const flujo = flujoNetoEntreFiltrado(diaSiguiente(prevDate), d, assetFilter);
 
     if (prevValue > 0) {
       const r = (valorFin - prevValue - flujo) / prevValue;
@@ -163,6 +212,14 @@ export function rentabilidadYtdPct() {
   }
 
   return (cumFactor - 1) * 100;
+}
+
+export function rentabilidadYtdInversionFinancieraPct() {
+  return calcularTwrAño(esInversionFinanciera);
+}
+
+export function rentabilidadYtdInmobiliarioPct() {
+  return calcularTwrAño(esInmobiliarioAsset);
 }
 
 // Igual que bandasDeRiesgo(): excluye inmobiliario y cuentas corrientes,
@@ -377,7 +434,7 @@ export function financialTotalsByEntity() {
 // curso usa la última posición conocida (no proyecta a 31/12), igual que el
 // resto del dashboard. Cada año usa, por (entidad, activo), la última
 // posición conocida en o antes de su 31 de diciembre — el mismo criterio que
-// ya usa rentabilidadYtdPct() para "valor a inicio de año", generalizado a
+// usan las funciones de TWR para "valor a inicio de año", generalizado a
 // todo el histórico en vez de solo al año pasado.
 export function evolucionAnualPatrimonio() {
   const data = store.get();
