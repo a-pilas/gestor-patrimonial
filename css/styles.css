@@ -121,9 +121,27 @@ body {
 .evo-bar { width: 100%; max-width: 36px; border-radius: 6px 6px 0 0; }
 .evo-bar-year { font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
 
-.evo-line-chart { width: 100%; height: auto; display: block; }
+.evo-line-chart { width: 100%; height: auto; display: block; cursor: crosshair; }
 .evo-line-month { font-size: 9px; fill: var(--muted); }
 .evo-line-total-label { font-size: 12px; font-weight: 700; fill: var(--text); }
+.evo-line-guide { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+
+.card-chart-hover { position: relative; }
+.evo-tooltip {
+  position: absolute;
+  background: var(--bg-card-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  pointer-events: none;
+  z-index: 5;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+.evo-tooltip-month { font-weight: 700; margin-bottom: 4px; }
+.evo-tooltip-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+.evo-tooltip-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
 
 .legend { width: 100%; display: flex; flex-direction: column; gap: 6px; }
 .legend-row { display: grid; grid-template-columns: 14px 1fr auto auto; align-items: center; gap: 8px; font-size: 0.9rem; }

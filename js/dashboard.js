@@ -289,7 +289,7 @@ function consolidatedEvolutionSvg(points) {
     .join("");
 
   return `
-    <svg viewBox="0 0 ${width} ${height}" class="evo-line-chart" preserveAspectRatio="none">
+    <svg id="evo-ytd-svg" viewBox="0 0 ${width} ${height}" class="evo-line-chart" preserveAspectRatio="none">
       <defs>
         <linearGradient id="evoTotalGradient" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.35" />
@@ -304,7 +304,9 @@ function consolidatedEvolutionSvg(points) {
       <circle cx="${lastX}" cy="${yFor(last.total)}" r="4" fill="var(--accent)" />
       <text x="${lastX}" y="${yFor(last.total) - 10}" text-anchor="end" class="evo-line-total-label">${fmtEUR(last.total)}</text>
       ${monthLabels}
+      <line id="evo-ytd-guide" x1="0" y1="${marginTop}" x2="0" y2="${marginTop + plotHeight}" class="evo-line-guide" style="display:none" />
     </svg>
+    <div class="evo-tooltip" id="evo-ytd-tooltip" style="display:none"></div>
   `;
 }
 
@@ -327,7 +329,7 @@ function evolutionYtdCard() {
   ];
 
   return `
-    <section class="card">
+    <section class="card card-chart-hover">
       <h3>Evolución del patrimonio YTD</h3>
       <p class="muted">Enero a mes actual, mes a mes. El Total destaca en el gráfico; las 3 líneas finas son cada bloque por separado.</p>
       ${consolidatedEvolutionSvg(points)}
@@ -337,6 +339,70 @@ function evolutionYtdCard() {
       </div>
     </section>
   `;
+}
+
+// Tooltip al pasar el ratón por el gráfico YTD: encuentra el mes más
+// cercano a la posición X del cursor (convertida a coordenadas del viewBox,
+// ya que el SVG escala de forma responsive) y muestra los 4 valores de ese
+// mes, con una línea vertical guía marcando el punto.
+function wireYtdChart(container) {
+  const svg = container.querySelector("#evo-ytd-svg");
+  const tooltip = container.querySelector("#evo-ytd-tooltip");
+  const guide = container.querySelector("#evo-ytd-guide");
+  if (!svg || !tooltip || !guide) return;
+
+  const points = evolucionMensualConsolidada();
+  if (points.length < 2) return;
+
+  const width = 700;
+  const marginLeft = 8;
+  const marginRight = 8;
+  const plotWidth = width - marginLeft - marginRight;
+  const xFor = (i) => marginLeft + (points.length === 1 ? plotWidth / 2 : (i / (points.length - 1)) * plotWidth);
+
+  function handleMove(ev) {
+    const rect = svg.getBoundingClientRect();
+    const relX = ((ev.clientX - rect.left) / rect.width) * width;
+    let nearest = 0;
+    let minDist = Infinity;
+    points.forEach((p, i) => {
+      const d = Math.abs(xFor(i) - relX);
+      if (d < minDist) {
+        minDist = d;
+        nearest = i;
+      }
+    });
+    const p = points[nearest];
+    const [y, m] = p.month.split("-");
+
+    guide.setAttribute("x1", xFor(nearest));
+    guide.setAttribute("x2", xFor(nearest));
+    guide.style.display = "";
+
+    tooltip.innerHTML = `
+      <div class="evo-tooltip-month">${MESES_CORTOS[Number(m) - 1]} ${y}</div>
+      <div class="evo-tooltip-row"><span class="evo-tooltip-dot" style="background:var(--accent)"></span>Total <strong>${fmtEUR(p.total)}</strong></div>
+      <div class="evo-tooltip-row"><span class="evo-tooltip-dot" style="background:${COLOR_LIQUIDEZ}"></span>Liquidez <strong>${fmtEUR(p.liquidez)}</strong></div>
+      <div class="evo-tooltip-row"><span class="evo-tooltip-dot" style="background:${COLOR_INVERTIDO}"></span>Inversión financiera <strong>${fmtEUR(p.inversionFinanciera)}</strong></div>
+      <div class="evo-tooltip-row"><span class="evo-tooltip-dot" style="background:${COLOR_INMOBILIARIO}"></span>Inmobiliario <strong>${fmtEUR(p.inmobiliario)}</strong></div>
+    `;
+    tooltip.style.display = "block";
+
+    const cardRect = svg.closest(".card").getBoundingClientRect();
+    const tooltipWidth = tooltip.offsetWidth || 190;
+    let left = ev.clientX - cardRect.left + 14;
+    if (left + tooltipWidth > cardRect.width) left = ev.clientX - cardRect.left - tooltipWidth - 14;
+    tooltip.style.left = `${Math.max(0, left)}px`;
+    tooltip.style.top = `${ev.clientY - cardRect.top - 10}px`;
+  }
+
+  function handleLeave() {
+    tooltip.style.display = "none";
+    guide.style.display = "none";
+  }
+
+  svg.addEventListener("mousemove", handleMove);
+  svg.addEventListener("mouseleave", handleLeave);
 }
 
 // Plusvalía realizada (activos ya vendidos/retirados del todo) vs. latente
@@ -564,6 +630,8 @@ export function renderDashboard(container) {
 
     ${financialByEntityTable()}
   `;
+
+  wireYtdChart(container);
 
   container.querySelector("#edit-benchmark")?.addEventListener("click", () => {
     const current = data.meta.benchmarkYtdPct;
