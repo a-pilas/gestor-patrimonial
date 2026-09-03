@@ -171,7 +171,11 @@ function flujoNetoEntreFiltrado(desde, hasta, assetFilter) {
 // distorsionando el resultado (incluso hasta hacerlo matemáticamente
 // absurdo, por debajo de -100%). Por eso el TWR se calcula por separado
 // para inversión financiera e inmobiliario, y nunca sobre la liquidez.
-function calcularTwrAño(assetFilter) {
+// Devuelve tanto el resultado final como el desglose por sub-periodo (fecha,
+// valor inicio/fin, flujo y rentabilidad de ESE sub-periodo) — el desglose
+// es lo que permite encontrar en qué mes concreto se dispara un número raro,
+// en vez de tener que confiar a ciegas en el porcentaje final.
+function calcularTwrAñoDetallado(assetFilter) {
   const now = new Date();
   const year = now.getFullYear();
   const todayIso = now.toISOString().slice(0, 10);
@@ -179,7 +183,7 @@ function calcularTwrAño(assetFilter) {
   const finAnioAnterior = `${year - 1}-12-31`;
 
   const valorInicioAño = valorFiltradoHasta(finAnioAnterior, assetFilter);
-  if (!valorInicioAño) return null; // sin histórico suficiente
+  if (!valorInicioAño) return { pct: null, detalle: [] }; // sin histórico suficiente
 
   const data = store.get();
   const fechas = [
@@ -198,28 +202,41 @@ function calcularTwrAño(assetFilter) {
   let cumFactor = 1;
   let prevDate = finAnioAnterior;
   let prevValue = valorInicioAño;
+  const detalle = [];
 
   for (const d of fechas) {
     const valorFin = valorFiltradoHasta(d, assetFilter);
     const flujo = flujoNetoEntreFiltrado(diaSiguiente(prevDate), d, assetFilter);
 
+    let rPct = null;
     if (prevValue > 0) {
       const r = (valorFin - prevValue - flujo) / prevValue;
       cumFactor *= 1 + r;
+      rPct = r * 100;
     }
+    detalle.push({ desde: prevDate, hasta: d, valorInicio: prevValue, valorFin, flujo, rPct });
+
     prevValue = valorFin;
     prevDate = d;
   }
 
-  return (cumFactor - 1) * 100;
+  return { pct: (cumFactor - 1) * 100, detalle };
 }
 
 export function rentabilidadYtdInversionFinancieraPct() {
-  return calcularTwrAño(esInversionFinanciera);
+  return calcularTwrAñoDetallado(esInversionFinanciera).pct;
 }
 
 export function rentabilidadYtdInmobiliarioPct() {
-  return calcularTwrAño(esInmobiliarioAsset);
+  return calcularTwrAñoDetallado(esInmobiliarioAsset).pct;
+}
+
+export function detalleTwrInversionFinanciera() {
+  return calcularTwrAñoDetallado(esInversionFinanciera).detalle;
+}
+
+export function detalleTwrInmobiliario() {
+  return calcularTwrAñoDetallado(esInmobiliarioAsset).detalle;
 }
 
 // Igual que bandasDeRiesgo(): excluye inmobiliario y cuentas corrientes,
@@ -753,8 +770,7 @@ export function evolucionMensualConsolidada() {
   const months = [];
   for (let m = 1; m <= currentMonth; m++) months.push(`${year}-${String(m).padStart(2, "0")}`);
 
-  return months.map((monthKey) => {
-    const cutoff = `${monthKey}-31`;
+  function totalesEnCorte(cutoff) {
     const map = new Map();
     for (const p of data.positions) {
       if (p.date > cutoff) continue;
@@ -773,8 +789,16 @@ export function evolucionMensualConsolidada() {
       else if (LIQUIDEZ_CONSOLIDADA_SUBCLASSES.includes(asset.subclass)) liquidez += value;
       else inversionFinanciera += value;
     }
-    return { month: monthKey, liquidez, inversionFinanciera, inmobiliario, total: liquidez + inversionFinanciera + inmobiliario };
-  });
+    return { liquidez, inversionFinanciera, inmobiliario, total: liquidez + inversionFinanciera + inmobiliario };
+  }
+
+  // Primer punto: cierre del año anterior (31/12), como referencia fija para
+  // comparar visualmente "de dónde partíamos" contra el resto del año — el
+  // gráfico lo separa con una línea vertical, no es un mes más.
+  const referencia = { month: `${year - 1}-12`, esReferencia: true, ...totalesEnCorte(`${year - 1}-12-31`) };
+  const puntosDelAño = months.map((monthKey) => ({ month: monthKey, esReferencia: false, ...totalesEnCorte(`${monthKey}-31`) }));
+
+  return [referencia, ...puntosDelAño];
 }
 
 // Colchón de liquidez (cuentas corrientes + ahorro + depósitos) mes a mes,

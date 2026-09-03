@@ -125,6 +125,16 @@ body {
 .evo-line-month { font-size: 9px; fill: var(--muted); }
 .evo-line-total-label { font-size: 12px; font-weight: 700; fill: var(--text); }
 .evo-line-guide { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+.evo-line-separator { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 5 4; opacity: 0.7; }
+.evo-line-month-ref { fill: var(--text); font-weight: 700; }
+
+.twr-detail {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--bg-card-alt);
+  border: 1px solid var(--border);
+}
 
 .card-chart-hover { position: relative; }
 .evo-tooltip {

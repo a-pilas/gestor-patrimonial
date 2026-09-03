@@ -6,6 +6,8 @@ import {
   totalAportadoNeto,
   rentabilidadYtdInversionFinancieraPct,
   rentabilidadYtdInmobiliarioPct,
+  detalleTwrInversionFinanciera,
+  detalleTwrInmobiliario,
   riskScores,
   fechaUltimaActualizacion,
   assetsWithoutPosition,
@@ -23,6 +25,8 @@ import {
 } from "./metrics.js";
 
 const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+let showTwrDetail = false;
 
 // Paleta validada (validate_palette.js, modo dark, superficie --bg-card
 // #17281f): las 5 comprobaciones (banda de luminosidad, croma, separación
@@ -284,10 +288,20 @@ function consolidatedEvolutionSvg(points) {
 
   const monthLabels = points
     .map((p, i) => {
-      const [, m] = p.month.split("-");
-      return `<text x="${xFor(i)}" y="${height - 8}" text-anchor="middle" class="evo-line-month">${MESES_CORTOS[Number(m) - 1]}</text>`;
+      const [y, m] = p.month.split("-");
+      const label = p.esReferencia ? `${MESES_CORTOS[Number(m) - 1]} ${y.slice(2)}` : MESES_CORTOS[Number(m) - 1];
+      return `<text x="${xFor(i)}" y="${height - 8}" text-anchor="middle" class="evo-line-month${p.esReferencia ? " evo-line-month-ref" : ""}">${label}</text>`;
     })
     .join("");
+
+  // Línea vertical fija separando el punto de referencia (cierre del año
+  // anterior) del resto del año, para poder comparar de un vistazo "de
+  // dónde partíamos" contra la evolución YTD sin confundirlo con un mes más.
+  const referenceIndex = points.findIndex((p) => p.esReferencia);
+  const separator =
+    referenceIndex >= 0 && points.length > referenceIndex + 1
+      ? `<line x1="${(xFor(referenceIndex) + xFor(referenceIndex + 1)) / 2}" y1="${marginTop}" x2="${(xFor(referenceIndex) + xFor(referenceIndex + 1)) / 2}" y2="${marginTop + plotHeight}" class="evo-line-separator" />`
+      : "";
 
   return `
     <svg id="evo-ytd-svg" viewBox="0 0 ${width} ${height}" class="evo-line-chart" preserveAspectRatio="none">
@@ -304,6 +318,7 @@ function consolidatedEvolutionSvg(points) {
       <polyline points="${totalLinePoints}" fill="none" stroke="var(--accent)" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round" />
       <circle cx="${lastX}" cy="${yFor(last.total)}" r="4" fill="var(--accent)" />
       <text x="${lastX}" y="${yFor(last.total) - 10}" text-anchor="end" class="evo-line-total-label">${fmtEUR(last.total)}</text>
+      ${separator}
       ${monthLabels}
       <line id="evo-ytd-guide" x1="0" y1="${marginTop}" x2="0" y2="${marginTop + plotHeight}" class="evo-line-guide" style="display:none" />
     </svg>
@@ -332,13 +347,56 @@ function evolutionYtdCard() {
   return `
     <section class="card card-chart-hover">
       <h3>Evolución del patrimonio YTD</h3>
-      <p class="muted">Enero a mes actual, mes a mes. El Total destaca en el gráfico; las 3 líneas finas son cada bloque por separado.</p>
+      <p class="muted">Enero a mes actual, mes a mes. El primer punto (antes de la línea vertical) es el cierre de ${points[0].month.split("-")[0]}, como referencia fija. El Total destaca en el gráfico; las 3 líneas finas son cada bloque por separado.</p>
       ${consolidatedEvolutionSvg(points)}
       <div class="legend">
         ${legendRow("var(--accent)", "Total", last.total, 100)}
         ${entries.map((e) => legendRow(e.color, e.label, e.value, last.total ? (e.value / last.total) * 100 : 0)).join("")}
       </div>
     </section>
+  `;
+}
+
+// Desglose sub-periodo a sub-periodo del cálculo del TWR: deja ver en qué
+// fecha concreta se dispara una rentabilidad de periodo fuera de lo normal,
+// en vez de tener que confiar a ciegas en el porcentaje final del año. Se
+// marca en rojo cualquier sub-periodo con |rentabilidad| > 50%, que casi
+// siempre delata un dato mal introducido (una Compra/Aportación con el
+// importe equivocado, una Posición que debería ser una Venta, etc.) en vez
+// de una rentabilidad real.
+function twrDetailTable(label, detalle) {
+  if (!detalle.length) return `<p class="muted">${label}: sin histórico suficiente.</p>`;
+  return `
+    <p class="muted" style="margin-top:12px"><strong>${label}</strong></p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Periodo</th><th>Valor inicio</th><th>Valor fin</th><th>Flujo</th><th>Rentabilidad del periodo</th></tr></thead>
+        <tbody>
+          ${detalle
+            .map((d) => {
+              const sospechoso = d.rPct != null && Math.abs(d.rPct) > 50;
+              return `<tr${sospechoso ? ' class="neg"' : ""}>
+                <td>${d.desde} → ${d.hasta}</td>
+                <td>${fmtEUR(d.valorInicio)}</td>
+                <td>${fmtEUR(d.valorFin)}</td>
+                <td>${fmtEUR(d.flujo)}</td>
+                <td>${d.rPct == null ? "—" : `${d.rPct >= 0 ? "+" : ""}${d.rPct.toFixed(2)}%`}</td>
+              </tr>`;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function twrDetailSection() {
+  return `
+    <div class="twr-detail">
+      <p class="muted">Filas en rojo: sub-periodos con una rentabilidad por encima del ±50%, casi siempre señal de un dato mal introducido (una Compra/Aportación con el importe equivocado, una Posición que en realidad era una Venta, etc.) en vez de una rentabilidad real de mercado.</p>
+      ${twrDetailTable("Inversión financiera", detalleTwrInversionFinanciera())}
+      ${twrDetailTable("Inmobiliario", detalleTwrInmobiliario())}
+    </div>
   `;
 }
 
@@ -606,6 +664,8 @@ export function renderDashboard(container) {
             <span class="ytd-value ${ytdInmobiliario >= 0 ? "pos" : "neg"}">${fmtPct(ytdInmobiliario)}</span>
           </div>
         </div>
+        <button type="button" id="btn-toggle-twr-detail" class="link-btn">${showTwrDetail ? "Ocultar detalle del cálculo" : "Ver detalle del cálculo"}</button>
+        ${showTwrDetail ? twrDetailSection() : ""}
       </section>
 
       <section class="card card-risk">
@@ -638,6 +698,11 @@ export function renderDashboard(container) {
   `;
 
   wireYtdChart(container);
+
+  container.querySelector("#btn-toggle-twr-detail")?.addEventListener("click", () => {
+    showTwrDetail = !showTwrDetail;
+    renderDashboard(container);
+  });
 
   container.querySelector("#edit-benchmark")?.addEventListener("click", () => {
     const current = data.meta.benchmarkYtdPct;
