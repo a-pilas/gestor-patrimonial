@@ -11,7 +11,8 @@ function resultadoCompraHtml(r) {
     <div class="kpi-row"><span>Impuestos de la operación</span><span>${fmtEUR(r.impuestos)}</span></div>
     <div class="kpi-row"><span>Otros gastos (notaría, registro, gestoría)</span><span>${fmtEUR(r.otrosGastos)}</span></div>
     <div class="kpi-row"><span>Coste total de adquisición</span><span>${fmtEUR(r.costeTotalAdquisicion)}</span></div>
-    <div class="kpi-row"><span><strong>Entrada necesaria</strong></span><span><strong>${fmtEUR(r.entradaNecesaria)}</strong></span></div>
+    ${r.valorVentaViviendaHabitual > 0 ? `<div class="kpi-row"><span>Aportado por venta de vivienda habitual</span><span class="pos">${fmtEUR(r.valorVentaViviendaHabitual)}</span></div>` : ""}
+    <div class="kpi-row"><span><strong>${r.entradaNecesaria >= 0 ? "Entrada necesaria de tu liquidez" : "Sobrante tras cubrir la entrada"}</strong></span><span class="${r.entradaNecesaria >= 0 ? "" : "pos"}"><strong>${fmtEUR(Math.abs(r.entradaNecesaria))}</strong></span></div>
     <div class="kpi-row"><span>Liquidez disponible hoy</span><span>${fmtEUR(r.liquidezActual)}</span></div>
     <div class="kpi-row"><span>Liquidez restante tras la entrada</span><span class="${r.liquidezRestante >= 0 ? "" : "neg"}">${fmtEUR(r.liquidezRestante)}</span></div>
     <div class="kpi-row"><span>Cuota mensual de esta hipoteca</span><span>${fmtEUR(r.cuotaMensual)}</span></div>
@@ -20,6 +21,11 @@ function resultadoCompraHtml(r) {
     <div class="kpi-row"><span>Patrimonio neto actual</span><span>${fmtEUR(r.patrimonioNetoActual)}</span></div>
     <div class="kpi-row"><span><strong>Impacto inmediato en patrimonio neto</strong></span><span class="neg"><strong>${fmtEUR(r.impactoPatrimonioNeto)}</strong></span></div>
     <p class="muted">El precio pagado se convierte en un activo del mismo valor, así que el patrimonio neto solo baja por los costes de la operación (impuestos + gastos) — el precio en sí no te empobrece, solo cambia de forma.</p>
+    ${
+      r.valorVentaViviendaHabitual > 0
+        ? `<p class="muted">La venta de tu vivienda habitual se cuenta solo como fuente de financiación (la cantidad que aportas a la operación) — no se modelan sus propios gastos (agencia, notaría) ni una posible ganancia patrimonial en el IRPF.</p>`
+        : ""
+    }
   `;
 }
 
@@ -107,6 +113,9 @@ export function renderSimuladores(container) {
         <label>Plazo (años)
           <input name="plazoAnios" type="number" step="1" min="1" value="${meta.compraPropiedadPlazoAnios ?? ""}" required />
         </label>
+        <label>Valor de venta de vivienda habitual aportado a la operación (€, opcional)
+          <input name="valorVentaViviendaHabitual" type="number" step="any" min="0" value="${meta.compraPropiedadValorVentaViviendaHabitual ?? ""}" placeholder="Déjalo en blanco si no vendes tu vivienda actual" />
+        </label>
         <div class="btn-row">
           <button type="submit">Calcular</button>
         </div>
@@ -155,6 +164,7 @@ export function renderSimuladores(container) {
       importeHipoteca: Number(fd.get("importeHipoteca")),
       tipoInteresPct: Number(fd.get("tipoInteresPct")),
       plazoAnios: Number(fd.get("plazoAnios")),
+      valorVentaViviendaHabitual: fd.get("valorVentaViviendaHabitual") ? Number(fd.get("valorVentaViviendaHabitual")) : 0,
     };
     store.updateMeta({
       compraPropiedadPrecio: params.precio,
@@ -162,6 +172,7 @@ export function renderSimuladores(container) {
       compraPropiedadImporteHipoteca: params.importeHipoteca,
       compraPropiedadTipoInteresPct: params.tipoInteresPct,
       compraPropiedadPlazoAnios: params.plazoAnios,
+      compraPropiedadValorVentaViviendaHabitual: params.valorVentaViviendaHabitual,
     });
     resultadoCompraDiv.innerHTML = resultadoCompraHtml(simulacionCompraPropiedad(params));
   }

@@ -138,6 +138,7 @@ export function emptyData() {
       compraPropiedadImporteHipoteca: null,
       compraPropiedadTipoInteresPct: null,
       compraPropiedadPlazoAnios: null,
+      compraPropiedadValorVentaViviendaHabitual: null,
       version: 1,
     },
     entities: [],

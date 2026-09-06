@@ -6,6 +6,7 @@ import { openModal } from "./modal.js";
 let bulkMode = false;
 let showZeroPositions = false;
 let historyYearFilter = "todos";
+let resumenEntityFilter = "todas";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -55,7 +56,9 @@ export function renderPositions(container) {
   // el dato, pero por defecto se oculta de "lo que tengo en cartera" para
   // no distorsionar la vista — un enlace lo despliega ocasionalmente.
   const resumenRowsZero = resumenRowsAll.filter((r) => r.valorActual != null && r.valorActual <= 0);
-  const resumenRows = showZeroPositions ? resumenRowsAll : resumenRowsAll.filter((r) => r.valorActual == null || r.valorActual > 0);
+  const resumenRowsVisibles = showZeroPositions ? resumenRowsAll : resumenRowsAll.filter((r) => r.valorActual == null || r.valorActual > 0);
+  const resumenRows =
+    resumenEntityFilter === "todas" ? resumenRowsVisibles : resumenRowsVisibles.filter((r) => (r.asset.entityId || "__sin_entidad__") === resumenEntityFilter);
 
   const historyYears = [...new Set(data.positions.map((p) => p.date.slice(0, 4)))].sort((a, b) => b.localeCompare(a));
   const filteredSorted = historyYearFilter === "todos" ? sorted : sorted.filter((p) => p.date.slice(0, 4) === historyYearFilter);
@@ -71,7 +74,20 @@ export function renderPositions(container) {
     </div>
 
     <section class="card">
-      <h3>Resumen por activo</h3>
+      <div class="section-head">
+        <h3>Resumen por activo</h3>
+        <select id="resumen-entity-filter">
+          <option value="todas" ${resumenEntityFilter === "todas" ? "selected" : ""}>Todas las entidades</option>
+          ${data.entities
+            .map((e) => `<option value="${e.id}" ${resumenEntityFilter === e.id ? "selected" : ""}>${e.name}</option>`)
+            .join("")}
+          ${
+            resumenRowsAll.some((r) => !r.asset.entityId)
+              ? `<option value="__sin_entidad__" ${resumenEntityFilter === "__sin_entidad__" ? "selected" : ""}>(sin entidad)</option>`
+              : ""
+          }
+        </select>
+      </div>
       <div class="table-wrap">
         <table class="table">
           <thead><tr><th>Activo</th><th>Entidad</th><th>Aportado</th><th>Valor actual</th><th>Plusvalía</th></tr></thead>
@@ -87,7 +103,8 @@ export function renderPositions(container) {
                     <td class="${r.plusvalia >= 0 ? "pos" : "neg"}">${r.plusvalia != null ? fmtEUR(r.plusvalia) : "—"}</td>
                   </tr>`
                 )
-                .join("") || '<tr><td colspan="5" class="muted">Sin activos todavía</td></tr>'
+                .join("") ||
+              `<tr><td colspan="5" class="muted">${resumenEntityFilter === "todas" ? "Sin activos todavía" : "Sin activos en esta entidad"}</td></tr>`
             }
           </tbody>
         </table>
@@ -288,6 +305,11 @@ export function renderPositions(container) {
       });
     });
   }
+
+  container.querySelector("#resumen-entity-filter").addEventListener("change", (ev) => {
+    resumenEntityFilter = ev.target.value;
+    renderPositions(container);
+  });
 
   container.querySelector("#btn-toggle-zero")?.addEventListener("click", () => {
     showZeroPositions = !showZeroPositions;

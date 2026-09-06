@@ -685,7 +685,7 @@ export function duracionPatrimonio({ gastoAnual, rentabilidadPct, inflacionPct, 
 // en un activo del mismo valor, así que el patrimonio neto solo baja por
 // los costes de la operación (impuestos + otros gastos), no por el precio
 // en sí — la entrada y la hipoteca son solo la forma de financiarlo.
-export function simulacionCompraPropiedad({ precio, tipoVivienda, importeHipoteca, tipoInteresPct, plazoAnios }) {
+export function simulacionCompraPropiedad({ precio, tipoVivienda, importeHipoteca, tipoInteresPct, plazoAnios, valorVentaViviendaHabitual }) {
   const data = store.get();
   const otrosGastosPct = Number(data.meta.otrosGastosCompraPct) || 0;
 
@@ -696,7 +696,11 @@ export function simulacionCompraPropiedad({ precio, tipoVivienda, importeHipotec
 
   const otrosGastos = precio * (otrosGastosPct / 100);
   const costeTotalAdquisicion = precio + impuestos + otrosGastos;
-  const entradaNecesaria = costeTotalAdquisicion - importeHipoteca;
+  // La venta de la vivienda habitual, si se aporta, es otra fuente de
+  // financiación más (junto a la hipoteca) — reduce lo que hace falta poner
+  // de la liquidez propia, sin modelar los gastos/impuestos propios de esa
+  // venta (eso queda fuera del alcance de este simulador).
+  const entradaNecesaria = costeTotalAdquisicion - importeHipoteca - (Number(valorVentaViviendaHabitual) || 0);
 
   const tipoMensual = (Number(tipoInteresPct) || 0) / 100 / 12;
   const meses = Math.round((Number(plazoAnios) || 0) * 12);
@@ -716,6 +720,7 @@ export function simulacionCompraPropiedad({ precio, tipoVivienda, importeHipotec
     impuestos,
     otrosGastos,
     costeTotalAdquisicion,
+    valorVentaViviendaHabitual: Number(valorVentaViviendaHabitual) || 0,
     entradaNecesaria,
     cuotaMensual,
     totalIntereses,
