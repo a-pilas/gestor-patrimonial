@@ -1,6 +1,7 @@
 import { store } from "./store.js";
 import { changePin, removePin } from "./lock.js";
 import { ASSET_CLASSES, DEFAULT_TRAMOS_AHORRO, DEFAULT_TRAMOS_PATRIMONIO, DEFAULT_TRAMOS_ITP_VIVIENDA } from "./model.js";
+import { guardarEnDrive, cargarDesdeDrive } from "./drive.js";
 
 export function renderSettings(container) {
   const data = store.get();
@@ -8,13 +9,23 @@ export function renderSettings(container) {
   container.innerHTML = `
     <section class="card">
       <h3>Copia de seguridad</h3>
-      <p class="muted">Mientras no esté conectada la sincronización con Google Drive, puedes descargar tus datos y guardarlos tú mismo en Drive, o cargarlos en otro dispositivo con "Importar".</p>
+      <p class="muted">Descarga tus datos y guárdalos tú mismo, o cárgalos en otro dispositivo con "Importar".</p>
       <div class="btn-row">
         <button id="btn-export">Exportar datos (.json)</button>
         <label class="file-btn">Importar datos (.json)
           <input id="input-import" type="file" accept="application/json" hidden />
         </label>
       </div>
+    </section>
+
+    <section class="card">
+      <h3>Copia de seguridad en Google Drive</h3>
+      <p class="muted">Manual, no automática: tú decides cuándo subir o bajar los datos, para no arriesgarnos a un sobrescrito silencioso si algún día usas la app desde dos sitios a la vez. Solo se te pedirá permiso la primera vez, y la app únicamente puede tocar el fichero que ella misma crea en tu Drive, nunca el resto de tus documentos.</p>
+      <div class="btn-row">
+        <button id="btn-drive-save">Guardar en Drive</button>
+        <button id="btn-drive-load">Cargar desde Drive</button>
+      </div>
+      <p id="drive-status" class="muted" style="margin-top:8px"></p>
     </section>
 
     <section class="card">
@@ -122,7 +133,7 @@ export function renderSettings(container) {
 
     <section class="card">
       <h3>Acerca de</h3>
-      <p class="muted">Gestor patrimonial — Fase 0 (MVP local). Los datos se guardan en este navegador. Próximas fases: rentabilidad TWR, fiscalidad, alertas de rebalanceo, X-Ray y sincronización con Google Drive.</p>
+      <p class="muted">Gestor patrimonial. Los datos se guardan en este navegador, con copia de seguridad manual en Google Drive. Pendiente: un análisis look-through de la composición interna de los fondos.</p>
     </section>
   `;
 
@@ -147,6 +158,41 @@ export function renderSettings(container) {
       location.reload();
     } catch (e) {
       alert("El fichero no es un JSON válido de esta aplicación.");
+    }
+  });
+
+  const driveStatus = container.querySelector("#drive-status");
+
+  container.querySelector("#btn-drive-save").addEventListener("click", async () => {
+    driveStatus.textContent = "Guardando en Drive…";
+    try {
+      const resultado = await guardarEnDrive(store.exportJson());
+      driveStatus.textContent = `Guardado en Drive (${resultado.modo === "creado" ? "fichero nuevo" : "actualizado"}) a las ${new Date().toLocaleTimeString("es-ES")}.`;
+    } catch (e) {
+      driveStatus.textContent = "";
+      alert(`No se pudo guardar en Drive: ${e.message}`);
+    }
+  });
+
+  container.querySelector("#btn-drive-load").addEventListener("click", async () => {
+    driveStatus.textContent = "Consultando Drive…";
+    try {
+      const resultado = await cargarDesdeDrive();
+      if (!resultado.encontrado) {
+        driveStatus.textContent = "";
+        alert('Todavía no hay ningún fichero guardado en Drive. Usa primero "Guardar en Drive".');
+        return;
+      }
+      driveStatus.textContent = "";
+      if (!confirm(`Se sustituirán TODOS los datos de este dispositivo por los guardados en Drive (${new Date(resultado.modifiedTime).toLocaleString("es-ES")}). ¿Continuar?`)) {
+        return;
+      }
+      store.importJson(resultado.contenido);
+      alert("Datos cargados desde Drive correctamente.");
+      location.reload();
+    } catch (e) {
+      driveStatus.textContent = "";
+      alert(`No se pudo cargar desde Drive: ${e.message}`);
     }
   });
 
