@@ -30,8 +30,10 @@ function ensureTokenClient() {
 }
 
 // Pide un token de acceso — si ya hay uno en memoria de esta pestaña lo
-// reutiliza; si no, abre el consentimiento de Google (silencioso si ya lo
-// diste antes en esta sesión del navegador).
+// reutiliza; si no, abre el selector de cuenta de Google (prompt:
+// "select_account" a propósito, para que siempre puedas elegir qué cuenta
+// usar si hay varias sesiones activas en el navegador, en vez de que Google
+// intente una silenciosa con la que le parezca y deniegue sin más).
 function getAccessToken() {
   return new Promise((resolve, reject) => {
     const client = ensureTokenClient();
@@ -47,7 +49,7 @@ function getAccessToken() {
       accessToken = resp.access_token;
       resolve(accessToken);
     };
-    client.requestAccessToken({ prompt: "" });
+    client.requestAccessToken({ prompt: "select_account" });
   });
 }
 
