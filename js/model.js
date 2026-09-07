@@ -32,6 +32,31 @@ export const REAL_ESTATE_SUBCLASSES = ["Vivienda", "Local/Oficina"];
 
 export const DEFAULT_REAL_ESTATE_SAFETY_PCT = 10;
 
+// Fase 6 — X-Ray: desglose geográfico look-through opcional por activo
+// financiero (de dónde vienen de verdad sus posiciones subyacentes, no la
+// etiqueta del fondo). España y Europa se tratan como zona euro a efectos
+// de estimar exposición a divisa; el resto, no-euro — una simplificación
+// deliberada, no un desglose de divisa aparte que habría que mantener por
+// duplicado.
+export const GEO_REGIONS = [
+  { key: "espana", label: "España" },
+  { key: "europa", label: "Resto de Europa" },
+  { key: "eeuu", label: "EE. UU." },
+  { key: "emergentes", label: "Mercados emergentes" },
+  { key: "otros", label: "Otros / global diversificado" },
+];
+export const GEO_REGIONS_EUR = ["espana", "europa"];
+
+// Liquidez "operativa" (efectivo/casi-efectivo sin composición interna que
+// tenga sentido desglosar) — se excluye del look-through y de los cálculos
+// de "inversión financiera" (TWR, consolidados...). Monetario SÍ cuenta como
+// inversión financiera: un fondo monetario tiene composición real (deuda a
+// corto plazo de países concretos) que puede merecer la pena desglosar.
+export const LIQUIDEZ_OPERATIVA_SUBCLASSES = ["Cuenta corriente", "Cuenta remunerada", "Depósito a plazo"];
+
+export const DEFAULT_XRAY_REVISION_DIAS_AVISO = 180;
+export const DEFAULT_CONCENTRACION_GEOGRAFICA_UMBRAL_PCT = 40;
+
 // Tramos progresivos del IRPF sobre la base del ahorro (2025-2026). Se
 // guardan en meta para poder corregirlos desde Ajustes si cambia la
 // normativa, en vez de quedar fijos en el código.
@@ -139,6 +164,9 @@ export function emptyData() {
       compraPropiedadTipoInteresPct: null,
       compraPropiedadPlazoAnios: null,
       compraPropiedadValorVentaViviendaHabitual: null,
+      xrayUltimaRevision: null,
+      xrayRevisionDiasAviso: DEFAULT_XRAY_REVISION_DIAS_AVISO,
+      concentracionGeograficaUmbralPct: DEFAULT_CONCENTRACION_GEOGRAFICA_UMBRAL_PCT,
       version: 1,
     },
     // Aparte de "meta" a propósito: el candado no es una preferencia

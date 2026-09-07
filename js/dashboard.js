@@ -22,6 +22,7 @@ import {
   plusvaliaRealizadaVsLatente,
   evolucionMensualLiquidez,
   evolucionMensualConsolidada,
+  estadoRevisionXray,
 } from "./metrics.js";
 
 const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -623,8 +624,21 @@ export function renderDashboard(container) {
       </section>`
     : "";
 
+  const revisionXray = estadoRevisionXray();
+  const xrayBanner = revisionXray.toca
+    ? `<section class="card card-warning">
+        <strong>Toca revisar el X-Ray</strong>
+        <p class="muted">${
+          revisionXray.ultima
+            ? `Han pasado ${revisionXray.diasDesde} días desde la última revisión.`
+            : "Todavía no lo has revisado nunca."
+        } Ve a <a href="#xray">X-Ray</a> para repasar la composición real de tus fondos.</p>
+      </section>`
+    : "";
+
   container.innerHTML = `
     ${missingBanner}
+    ${xrayBanner}
     <div class="dash-grid">
       <section class="card card-donut">
         ${donutSvg(totals, total)}

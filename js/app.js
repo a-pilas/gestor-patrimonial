@@ -7,6 +7,7 @@ import { renderFiscal } from "./fiscal.js";
 import { renderAlerts } from "./alerts.js";
 import { renderDecisions } from "./decisions.js";
 import { renderSimuladores } from "./simuladores.js";
+import { renderXray } from "./xray.js";
 import { renderSettings } from "./settings.js";
 import { ensureUnlocked } from "./lock.js";
 import { conectar as conectarDrive, onSyncStatus } from "./sync.js";
@@ -21,6 +22,7 @@ const TABS = [
   { id: "alertas", label: "Alertas", render: renderAlerts },
   { id: "decisiones", label: "Decisiones", render: renderDecisions },
   { id: "simuladores", label: "Simuladores", render: renderSimuladores },
+  { id: "xray", label: "X-Ray", render: renderXray },
   { id: "activos", label: "Activos", render: renderCatalog },
   { id: "deudas", label: "Deudas", render: renderLiabilities },
   { id: "ajustes", label: "Ajustes", render: renderSettings },

@@ -1,4 +1,4 @@
-import { ASSET_CLASSES, REAL_ESTATE_SUBCLASSES } from "./model.js";
+import { ASSET_CLASSES, REAL_ESTATE_SUBCLASSES, GEO_REGIONS, GEO_REGIONS_EUR, LIQUIDEZ_OPERATIVA_SUBCLASSES } from "./model.js";
 import { store, latestPositionsByAssetEntity, latestLiabilityPositions, assetById, entityById } from "./store.js";
 
 // El precio de compra de un inmueble físico cuenta como capital aportado a ese
@@ -100,8 +100,8 @@ function diaSiguiente(dateStr) {
 // evolucionMensualConsolidada(): "inversión financiera" es lo financiero
 // que no es liquidez operativa (cuenta corriente/ahorro/depósito) ni
 // inmobiliario.
-function esInversionFinanciera(asset) {
-  return asset.class !== "inmobiliario" && !LIQUIDEZ_CONSOLIDADA_SUBCLASSES.includes(asset.subclass);
+export function esInversionFinanciera(asset) {
+  return asset.class !== "inmobiliario" && !LIQUIDEZ_OPERATIVA_SUBCLASSES.includes(asset.subclass);
 }
 function esInmobiliarioAsset(asset) {
   return asset.class === "inmobiliario";
@@ -756,11 +756,6 @@ export function simulacionVenderTodoHoy(year) {
   return { latente, yaRealizadoEsteAño, cuotaYaDebida, cuotaSiVendieraTodo, costeIncremental: cuotaSiVendieraTodo - cuotaYaDebida };
 }
 
-// Subclases que forman el bloque "liquidez" en patrimonioConsolidado() —
-// se repite aquí para poder recalcular el mismo reparto mes a mes (Monetario
-// se agrupa con fondos/ETF en financialBreakdownBySubclass, no aquí).
-const LIQUIDEZ_CONSOLIDADA_SUBCLASSES = ["Cuenta corriente", "Cuenta remunerada", "Depósito a plazo"];
-
 // Evolución mensual del patrimonio consolidado (liquidez / inversión
 // financiera / inmobiliario / total) desde enero del año en curso hasta el
 // mes actual — mismo criterio de "última posición conocida hasta la fecha
@@ -791,7 +786,7 @@ export function evolucionMensualConsolidada() {
       if (!asset) continue;
       const value = valueOfPosition(p);
       if (asset.class === "inmobiliario") inmobiliario += value;
-      else if (LIQUIDEZ_CONSOLIDADA_SUBCLASSES.includes(asset.subclass)) liquidez += value;
+      else if (LIQUIDEZ_OPERATIVA_SUBCLASSES.includes(asset.subclass)) liquidez += value;
       else inversionFinanciera += value;
     }
     return { liquidez, inversionFinanciera, inmobiliario, total: liquidez + inversionFinanciera + inmobiliario };
@@ -916,4 +911,129 @@ export function vencimientosProximos() {
     .map((a) => ({ asset: a, dias: Math.round((new Date(a.vencimiento + "T00:00:00") - hoy) / 86400000) }))
     .filter((r) => r.dias <= diasAviso)
     .sort((a, b) => a.dias - b.dias);
+}
+
+// --- Fase 6: X-Ray look-through ---
+
+// Activos financieros actuales con su valor, separados según si tienen
+// desglose geográfico introducido o no — para saber qué parte de la
+// cartera ya se puede analizar look-through y cuál falta por completar,
+// ordenada por importe para saber por dónde empieza a compensar más.
+export function coberturaLookThrough() {
+  let total = 0;
+  const conDatos = [];
+  const sinDatos = [];
+  for (const p of latestPositionsByAssetEntity()) {
+    const asset = assetById(p.assetId);
+    if (!asset || !esInversionFinanciera(asset)) continue;
+    const value = valueOfPosition(p);
+    total += value;
+    (asset.geoBreakdown ? conDatos : sinDatos).push({ asset, value });
+  }
+  sinDatos.sort((a, b) => b.value - a.value);
+  const valorConDatos = conDatos.reduce((s, r) => s + r.value, 0);
+  return { total, valorConDatos, pctConDatos: total ? (valorConDatos / total) * 100 : 0, sinDatos };
+}
+
+// Exposición geográfica real (look-through), ponderada por el valor de cada
+// activo y su % declarado por región — solo sobre los activos que tienen
+// desglose introducido (coberturaLookThrough() indica qué parte es esta).
+export function exposicionGeograficaLookThrough() {
+  const porRegion = {};
+  for (const r of GEO_REGIONS) porRegion[r.key] = 0;
+  let totalConDatos = 0;
+
+  for (const p of latestPositionsByAssetEntity()) {
+    const asset = assetById(p.assetId);
+    if (!asset || !esInversionFinanciera(asset) || !asset.geoBreakdown) continue;
+    const value = valueOfPosition(p);
+    totalConDatos += value;
+    for (const r of GEO_REGIONS) {
+      const pct = Number(asset.geoBreakdown[r.key]) || 0;
+      porRegion[r.key] += value * (pct / 100);
+    }
+  }
+  return { porRegion, totalConDatos };
+}
+
+// Exposición real a divisa no-euro (look-through): un fondo "Cubierto a
+// EUR" no aporta riesgo de divisa aunque invierta fuera, así que cuenta
+// entero como euro; el resto reparte su valor según el desglose geográfico
+// (España + resto de Europa como euro; el resto, no-euro) — una
+// simplificación deliberada en vez de pedir un desglose de divisa aparte
+// que habría que mantener por duplicado.
+export function exposicionDivisaLookThrough() {
+  let totalConDatos = 0;
+  let expuestoNoEur = 0;
+
+  for (const p of latestPositionsByAssetEntity()) {
+    const asset = assetById(p.assetId);
+    if (!asset || !esInversionFinanciera(asset) || !asset.geoBreakdown) continue;
+    const value = valueOfPosition(p);
+    totalConDatos += value;
+    if (asset.hedged) continue;
+    const pctNoEur = GEO_REGIONS.filter((r) => !GEO_REGIONS_EUR.includes(r.key)).reduce(
+      (s, r) => s + (Number(asset.geoBreakdown[r.key]) || 0),
+      0
+    );
+    expuestoNoEur += value * (pctNoEur / 100);
+  }
+  return { totalConDatos, expuestoNoEur, pctExpuesto: totalConDatos ? (expuestoNoEur / totalConDatos) * 100 : 0 };
+}
+
+// Conclusiones automáticas del X-Ray: cruza el look-through con lo que ya
+// calculan otras pantallas (bandas de riesgo, concentración) para señalar
+// lo que de verdad merece un vistazo, en vez de solo mostrar números sueltos.
+export function conclusionesXray() {
+  const conclusiones = [];
+  const cobertura = coberturaLookThrough();
+  const geo = exposicionGeograficaLookThrough();
+  const divisa = exposicionDivisaLookThrough();
+  const data = store.get();
+  const umbralGeo = Number(data.meta.concentracionGeograficaUmbralPct) || 0;
+
+  if (cobertura.pctConDatos < 50) {
+    conclusiones.push(
+      `Todavía falta desglosar la mayor parte de tu cartera (solo el ${cobertura.pctConDatos.toFixed(0)}% tiene composición introducida) — las conclusiones de abajo son parciales. Empieza por "${cobertura.sinDatos[0]?.asset.name || "tus mayores fondos"}", que es donde más cambiaría el resultado.`
+    );
+  }
+
+  if (geo.totalConDatos > 0) {
+    const mayor = GEO_REGIONS.map((r) => ({ ...r, value: geo.porRegion[r.key] }))
+      .sort((a, b) => b.value - a.value)[0];
+    const pctMayor = (mayor.value / geo.totalConDatos) * 100;
+    if (pctMayor > umbralGeo) {
+      conclusiones.push(
+        `Mirando lo que hay DENTRO de tus fondos (no solo su etiqueta), tienes un ${pctMayor.toFixed(0)}% realmente expuesto a ${mayor.label} — por encima del umbral de concentración geográfica (${umbralGeo}%) configurado en Ajustes.`
+      );
+    }
+  }
+
+  if (divisa.totalConDatos > 0 && divisa.pctExpuesto > 0) {
+    conclusiones.push(
+      `De lo analizado, ${fmtEURInterno(divisa.expuestoNoEur)} (${divisa.pctExpuesto.toFixed(0)}%) están realmente expuestos a divisas distintas del euro sin cobertura — esa parte sube y baja también con el tipo de cambio, no solo con el mercado.`
+    );
+  }
+
+  if (!conclusiones.length && cobertura.pctConDatos >= 50) {
+    conclusiones.push("Con lo analizado hasta ahora, no hay ninguna concentración geográfica ni exposición a divisa que destaque especialmente.");
+  }
+
+  return conclusiones;
+}
+
+function fmtEURInterno(n) {
+  return Number(n || 0).toLocaleString("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+}
+
+// Fecha de la última vez que se revisó el X-Ray (para el aviso periódico) y
+// si toca revisarlo ya, según los días de aviso configurados en Ajustes.
+export function estadoRevisionXray() {
+  const data = store.get();
+  const ultima = data.meta.xrayUltimaRevision;
+  const diasAviso = Number(data.meta.xrayRevisionDiasAviso) || 0;
+  if (!ultima) return { ultima: null, diasDesde: null, toca: coberturaLookThrough().total > 0 };
+  const hoy = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00");
+  const dias = Math.round((hoy - new Date(ultima + "T00:00:00")) / 86400000);
+  return { ultima, diasDesde: dias, toca: dias >= diasAviso };
 }

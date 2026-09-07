@@ -1,5 +1,20 @@
-import { ASSET_CLASSES, SUBCLASSES, RISK_SCALE_MAX, REAL_ESTATE_SUBCLASSES, SUBCLASSES_CON_VENCIMIENTO } from "./model.js";
+import {
+  ASSET_CLASSES,
+  SUBCLASSES,
+  RISK_SCALE_MAX,
+  REAL_ESTATE_SUBCLASSES,
+  SUBCLASSES_CON_VENCIMIENTO,
+  GEO_REGIONS,
+  LIQUIDEZ_OPERATIVA_SUBCLASSES,
+} from "./model.js";
 import { store } from "./store.js";
+
+// Mismo criterio que esInversionFinanciera() en metrics.js (TWR, look-through
+// del X-Ray...), pero sobre los valores sueltos del formulario en vez de un
+// objeto Asset ya guardado.
+function esFinancieroLookThrough(classVal, subclassVal) {
+  return classVal !== "inmobiliario" && !LIQUIDEZ_OPERATIVA_SUBCLASSES.includes(subclassVal);
+}
 
 function fmtEUR(n) {
   if (n == null || isNaN(n)) return "—";
@@ -81,6 +96,13 @@ export function renderCatalog(container) {
                 <label id="vencimiento-field" style="display:none">Fecha de vencimiento
                   <input name="vencimiento" type="date" value="${editing?.vencimiento || ""}" />
                 </label>
+                <div id="lookthrough-field" style="display:none">
+                  <label class="checkbox-label"><input name="hedged" type="checkbox" ${editing?.hedged ? "checked" : ""} /> Cubierto a EUR (hedged)</label>
+                  <p class="muted">Opcional: de dónde vienen de verdad sus posiciones subyacentes (según el KIID/factsheet del fondo), para el informe X-Ray. Déjalo en blanco si no lo sabes — no hace falta rellenarlo para todos los fondos a la vez, el informe funciona con los que vayas completando.</p>
+                  ${GEO_REGIONS.map(
+                    (r) => `<label>${r.label} (%) <input name="geo_${r.key}" type="number" min="0" max="100" step="any" value="${editing?.geoBreakdown?.[r.key] ?? ""}" /></label>`
+                  ).join("")}
+                </div>
                 <div class="btn-row">
                   <button type="submit">${editing ? "Guardar cambios" : "Añadir activo"}</button>
                   ${editing ? `<button type="button" id="cancel-edit-asset">Cancelar</button>` : ""}
@@ -108,7 +130,9 @@ export function renderCatalog(container) {
                       a.class === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(a.subclass)
                         ? ` <span class="muted">(compra ${fmtEUR(a.purchasePrice)}${a.acquisitionDate ? ` el ${a.acquisitionDate}` : ""}${a.rented ? ` · en rentabilidad${a.rentaAnual ? ` (${fmtEUR(a.rentaAnual)}/año)` : ""}` : ""}${a.viviendaHabitual ? " · vivienda habitual" : ""}${a.wealthTaxValue ? ` · Patrimonio ${fmtEUR(a.wealthTaxValue)}` : ""})</span>`
                         : ""
-                    }${a.vencimiento ? ` <span class="muted">(vence ${a.vencimiento})</span>` : ""}</td>
+                    }${a.vencimiento ? ` <span class="muted">(vence ${a.vencimiento})</span>` : ""}${
+                      a.geoBreakdown ? ` <span class="muted">(look-through${a.hedged ? " · hedged" : ""})</span>` : ""
+                    }</td>
                     <td>${a.isin || "—"}</td>
                     <td>${a.riskScore ?? "—"}</td>
                     <td>
@@ -131,6 +155,7 @@ export function renderCatalog(container) {
   const realEstateFields = container.querySelector("#real-estate-fields");
   const viviendaHabitualField = container.querySelector("#vivienda-habitual-field");
   const vencimientoField = container.querySelector("#vencimiento-field");
+  const lookthroughField = container.querySelector("#lookthrough-field");
   const rentedCheckbox = container.querySelector('input[name="rented"]');
   const rentaAnualField = container.querySelector("#renta-anual-field");
   if (rentedCheckbox) {
@@ -163,15 +188,20 @@ export function renderCatalog(container) {
     function refreshVencimientoField() {
       vencimientoField.style.display = SUBCLASSES_CON_VENCIMIENTO.includes(subclassSelect.value) ? "" : "none";
     }
+    function refreshLookthroughField() {
+      lookthroughField.style.display = esFinancieroLookThrough(classSelect.value, subclassSelect.value) ? "" : "none";
+    }
     classSelect.addEventListener("change", () => {
       refreshSubclasses();
       refreshMixField();
       refreshRealEstateFields();
       refreshVencimientoField();
+      refreshLookthroughField();
     });
     subclassSelect.addEventListener("change", () => {
       refreshRealEstateFields();
       refreshVencimientoField();
+      refreshLookthroughField();
     });
     if (!editing) refreshSubclasses();
     else {
@@ -182,6 +212,7 @@ export function renderCatalog(container) {
     refreshMixField();
     refreshRealEstateFields();
     refreshVencimientoField();
+    refreshLookthroughField();
   }
 
   container.querySelector("#form-entity").addEventListener("submit", (ev) => {
@@ -195,6 +226,17 @@ export function renderCatalog(container) {
     ev.preventDefault();
     const fd = new FormData(ev.target);
     const isRealEstate = fd.get("class") === "inmobiliario" && REAL_ESTATE_SUBCLASSES.includes(fd.get("subclass"));
+    const esFinanciero = esFinancieroLookThrough(fd.get("class"), fd.get("subclass"));
+    let geoBreakdown = null;
+    if (esFinanciero) {
+      const valores = GEO_REGIONS.map((r) => fd.get(`geo_${r.key}`));
+      if (valores.some((v) => v !== "" && v != null)) {
+        geoBreakdown = {};
+        GEO_REGIONS.forEach((r, i) => {
+          geoBreakdown[r.key] = valores[i] === "" || valores[i] == null ? 0 : Number(valores[i]);
+        });
+      }
+    }
     const payload = {
       entityId: fd.get("entityId") || null,
       name: fd.get("name").trim(),
@@ -210,6 +252,8 @@ export function renderCatalog(container) {
       wealthTaxValue: isRealEstate && fd.get("wealthTaxValue") ? Number(fd.get("wealthTaxValue")) : null,
       viviendaHabitual: isRealEstate && fd.get("subclass") === "Vivienda" ? fd.get("viviendaHabitual") === "on" : false,
       vencimiento: SUBCLASSES_CON_VENCIMIENTO.includes(fd.get("subclass")) && fd.get("vencimiento") ? fd.get("vencimiento") : null,
+      hedged: esFinanciero ? fd.get("hedged") === "on" : false,
+      geoBreakdown,
     };
     if (editingAssetId) {
       store.updateAsset(editingAssetId, payload);

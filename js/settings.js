@@ -133,6 +133,17 @@ export function renderSettings(container) {
     </section>
 
     <section class="card">
+      <h3>X-Ray</h3>
+      <label>Umbral de concentración geográfica real (%, look-through)
+        <input id="concentracion-geografica-umbral" type="number" step="any" min="0" max="100" value="${data.meta.concentracionGeograficaUmbralPct}" />
+      </label>
+      <label>Días entre avisos de revisar el X-Ray
+        <input id="xray-revision-dias" type="number" step="1" min="0" value="${data.meta.xrayRevisionDiasAviso}" />
+      </label>
+      <button id="save-xray-umbrales">Guardar</button>
+    </section>
+
+    <section class="card">
       <h3>Simulador — Compra de propiedad</h3>
       <p class="muted">Impuestos vigentes en Galicia. Ajústalos si cambia la normativa o tu residencia fiscal.</p>
       <p class="muted" style="margin-top:10px"><strong>Vivienda usada — tramos de ITP (%)</strong></p>
@@ -349,6 +360,17 @@ export function renderSettings(container) {
       return;
     }
     store.updateMeta({ concentracionActivoUmbralPct, concentracionEntidadUmbralPct, vencimientoDiasAviso });
+    alert("Guardado.");
+  });
+
+  container.querySelector("#save-xray-umbrales").addEventListener("click", () => {
+    const concentracionGeograficaUmbralPct = Number(container.querySelector("#concentracion-geografica-umbral").value);
+    const xrayRevisionDiasAviso = Number(container.querySelector("#xray-revision-dias").value);
+    if ([concentracionGeograficaUmbralPct, xrayRevisionDiasAviso].some((n) => isNaN(n) || n < 0)) {
+      alert("Introduce valores válidos.");
+      return;
+    }
+    store.updateMeta({ concentracionGeograficaUmbralPct, xrayRevisionDiasAviso });
     alert("Guardado.");
   });
 
