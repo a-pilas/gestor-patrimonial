@@ -21,6 +21,7 @@ let data = load();
 function withDefaults(parsed) {
   const merged = { ...emptyData(), ...parsed };
   merged.meta = { ...emptyData().meta, ...(parsed.meta || {}) };
+  merged.security = { ...emptyData().security, ...(parsed.security || {}) };
   merged.liabilities = parsed.liabilities || [];
   merged.liabilityPositions = parsed.liabilityPositions || [];
   return merged;
@@ -52,8 +53,20 @@ function load() {
   }
 }
 
-function persist() {
+// Observadores de cambios (usados por sync.js para lanzar un guardado en
+// Drive tras cada mutación) — separado de persist() para que store.js no
+// tenga que saber nada de Drive ni importar ese módulo.
+const changeListeners = [];
+export function onChange(fn) {
+  changeListeners.push(fn);
+}
+
+// silent:true se usa al aplicar datos que ACABAN de llegar de Drive, para
+// no relanzar inmediatamente un guardado de vuelta con lo mismo que se
+// acaba de recibir (el eco típico de una sincronización de ida y vuelta).
+function persist(opts = {}) {
   localStorage.setItem(KEY, JSON.stringify(data));
+  if (!opts.silent) changeListeners.forEach((fn) => fn());
 }
 
 export const store = {
@@ -141,6 +154,12 @@ export const store = {
     persist();
   },
 
+  // --- Candado (contraseña compartida entre dispositivos vía Drive) ---
+  updateSecurity(patch) {
+    data.security = { ...data.security, ...patch };
+    persist();
+  },
+
   // --- Pasivos (deudas/hipotecas) ---
   addLiability(liability) {
     const l = { id: uid(), monthlyPayment: null, notes: "", ...liability };
@@ -208,9 +227,9 @@ export const store = {
     data = withDefaults(parsed);
     persist();
   },
-  replaceAll(newData) {
+  replaceAll(newData, opts) {
     data = withDefaults(newData);
-    persist();
+    persist(opts);
   },
 };
 

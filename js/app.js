@@ -9,6 +9,7 @@ import { renderDecisions } from "./decisions.js";
 import { renderSimuladores } from "./simuladores.js";
 import { renderSettings } from "./settings.js";
 import { ensureUnlocked } from "./lock.js";
+import { conectar as conectarDrive, onSyncStatus } from "./sync.js";
 
 await ensureUnlocked();
 
@@ -48,6 +49,15 @@ function renderTab() {
 
 window.addEventListener("hashchange", renderTab);
 renderTab();
+
+// Si este dispositivo ya se conectó a Drive antes, intenta reengancharse en
+// segundo plano sin interrumpir el arranque (funciona en local mientras
+// tanto). Si trae datos más recientes, se vuelve a pintar la pestaña
+// actual para reflejarlos sin que haga falta recargar a mano.
+onSyncStatus((estado) => {
+  if (estado.tipo === "sincronizado" || estado.tipo === "conflicto") renderTab();
+});
+conectarDrive({ interactivo: false });
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {

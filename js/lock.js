@@ -1,15 +1,15 @@
-// Candado de acceso local a la app. Es una barrera simple en el propio
-// navegador (no hay servidor): protege de que alguien abra la app sin más
-// en este dispositivo, pero no es seguridad real (el código es visible).
-// La contraseña nunca se guarda en texto plano, solo su hash SHA-256, y
-// nunca sale de este navegador.
+// Candado de acceso a la app. No es seguridad real (el código es visible),
+// es un filtro sencillo para que nadie la abra sin más. La contraseña nunca
+// se guarda en texto plano, solo su hash SHA-256 — y desde que existe la
+// sincronización con Drive, vive dentro del propio store (store.security),
+// así que es la MISMA en todos los dispositivos conectados, no una por
+// navegador como al principio.
 
-const PIN_KEY = "gestorPatrimonial:pin";
+import { store } from "./store.js";
+import { conectar as conectarDrive } from "./sync.js";
+
 const SESSION_KEY = "gestorPatrimonial:unlocked";
 
-// crypto.subtle solo existe en contextos seguros (https:// o localhost). Si
-// la app se abre por http:// (p.ej. mientras el certificado del dominio
-// propio todavía no está emitido), no hay forma de cifrar la contraseña.
 function cryptoAvailable() {
   return typeof crypto !== "undefined" && !!crypto.subtle;
 }
@@ -21,16 +21,12 @@ async function sha256(text) {
 }
 
 function getStoredPin() {
-  try {
-    const raw = localStorage.getItem(PIN_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+  const { pinHash, pinHint } = store.get().security;
+  return pinHash ? { hash: pinHash, hint: pinHint } : null;
 }
 
 function setStoredPin(hash, hint) {
-  localStorage.setItem(PIN_KEY, JSON.stringify({ hash, hint: hint || "" }));
+  store.updateSecurity({ pinHash: hash, pinHint: hint || "" });
 }
 
 export function hasPin() {
@@ -38,7 +34,7 @@ export function hasPin() {
 }
 
 export function removePin() {
-  localStorage.removeItem(PIN_KEY);
+  store.updateSecurity({ pinHash: null, pinHint: "" });
   sessionStorage.removeItem(SESSION_KEY);
 }
 
@@ -103,7 +99,11 @@ function renderSetup(resolve) {
   el.innerHTML = `
     <div class="lock-card">
       <h2>Configura una contraseña</h2>
-      <p class="muted">Protege el acceso a esta app en este dispositivo. Es un candado local: no envía nada a ningún servidor y solo afecta a este navegador.</p>
+      <p class="muted">Protege el acceso a esta app en este dispositivo.</p>
+      <p class="muted">Si ya usas la app en otro dispositivo, conecta primero con Drive para traer la misma contraseña y tus datos — así no tienes que crear una nueva aquí.</p>
+      <button type="button" id="lock-connect-drive">Conectar con Google Drive</button>
+      <p id="lock-connect-status" class="muted"></p>
+      <p class="muted" style="margin-top:16px">O, si es la primera vez que usas la app en cualquier dispositivo, configura una contraseña nueva:</p>
       <form id="lock-setup-form" class="stacked-form">
         <label>Contraseña <input name="pin" type="password" required minlength="4" autocomplete="new-password" /></label>
         <label>Repite la contraseña <input name="pin2" type="password" required minlength="4" autocomplete="new-password" /></label>
@@ -113,6 +113,30 @@ function renderSetup(resolve) {
       <p id="lock-error" class="neg"></p>
     </div>
   `;
+
+  el.querySelector("#lock-connect-drive").addEventListener("click", async (ev) => {
+    const btn = ev.target;
+    const status = el.querySelector("#lock-connect-status");
+    btn.disabled = true;
+    status.textContent = "Conectando…";
+    const ok = await conectarDrive({ interactivo: true });
+    btn.disabled = false;
+    if (!ok) {
+      status.textContent = "No se pudo conectar. Puedes reintentarlo o configurar una contraseña nueva abajo.";
+      return;
+    }
+    // Tras conectar, pullInicial ya ha traído (o inicializado) los datos:
+    // si ahora hay contraseña, pasamos a pedirla; si no, este es el primer
+    // dispositivo conectado y se sigue con el formulario de abajo.
+    const stored = getStoredPin();
+    if (stored) {
+      el.remove();
+      renderUnlock(stored, resolve);
+    } else {
+      status.textContent = "Conectado. Como todavía no hay contraseña guardada, define una abajo — quedará sincronizada para el resto de dispositivos.";
+    }
+  });
+
   el.querySelector('input[name="pin"]').focus();
   el.querySelector("#lock-setup-form").addEventListener("submit", async (ev) => {
     ev.preventDefault();
@@ -166,3 +190,4 @@ function renderUnlock(stored, resolve) {
     }
   });
 }
+

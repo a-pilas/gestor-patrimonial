@@ -141,6 +141,14 @@ export function emptyData() {
       compraPropiedadValorVentaViviendaHabitual: null,
       version: 1,
     },
+    // Aparte de "meta" a propósito: el candado no es una preferencia
+    // financiera, y así queda claro qué es qué al leer un export/import.
+    // Viaja dentro del mismo JSON sincronizado para que la contraseña sea
+    // una sola, la misma en todos los dispositivos conectados a Drive.
+    security: {
+      pinHash: null,
+      pinHint: "",
+    },
     entities: [],
     assets: [],
     positions: [],

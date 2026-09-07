@@ -1,10 +1,21 @@
 import { store } from "./store.js";
 import { changePin, removePin } from "./lock.js";
 import { ASSET_CLASSES, DEFAULT_TRAMOS_AHORRO, DEFAULT_TRAMOS_PATRIMONIO, DEFAULT_TRAMOS_ITP_VIVIENDA } from "./model.js";
-import { guardarEnDrive, cargarDesdeDrive } from "./drive.js";
+import {
+  conectar as conectarDrive,
+  desconectar as desconectarDrive,
+  empujarAhora,
+  estaConectado,
+  getUltimoConflicto,
+  getUltimaSincronizacion,
+  resolverConflicto,
+} from "./sync.js";
 
 export function renderSettings(container) {
   const data = store.get();
+  const conectado = estaConectado();
+  const conflicto = getUltimoConflicto();
+  const ultimaSync = getUltimaSincronizacion();
 
   container.innerHTML = `
     <section class="card">
@@ -19,13 +30,32 @@ export function renderSettings(container) {
     </section>
 
     <section class="card">
-      <h3>Copia de seguridad en Google Drive</h3>
-      <p class="muted">Manual, no automática: tú decides cuándo subir o bajar los datos, para no arriesgarnos a un sobrescrito silencioso si algún día usas la app desde dos sitios a la vez. Solo se te pedirá permiso la primera vez, y la app únicamente puede tocar el fichero que ella misma crea en tu Drive, nunca el resto de tus documentos.</p>
-      <div class="btn-row">
-        <button id="btn-drive-save">Guardar en Drive</button>
-        <button id="btn-drive-load">Cargar desde Drive</button>
-      </div>
-      <p id="drive-status" class="muted" style="margin-top:8px"></p>
+      <h3>Sincronización con Google Drive</h3>
+      ${
+        conectado
+          ? `<p class="muted">Conectado. Cada cambio se guarda solo en Drive a los pocos segundos, y al abrir la app en cualquier dispositivo conectado se carga lo último automáticamente — incluida la contraseña del candado, que ya es la misma en todos. La app solo puede tocar el fichero que ella misma crea en tu Drive, nunca el resto de tus documentos.</p>
+             <div class="btn-row">
+               <button id="btn-drive-sync-now">Sincronizar ahora</button>
+               <button id="btn-drive-disconnect" class="link-btn danger">Desconectar este dispositivo</button>
+             </div>`
+          : `<p class="muted">Conecta para que tus datos (y la contraseña del candado) se sincronicen automáticamente entre todos tus dispositivos, con Drive como referencia. Solo se pide permiso una vez, y la app únicamente puede tocar el fichero que ella misma crea en tu Drive, nunca el resto de tus documentos.</p>
+             <div class="btn-row">
+               <button id="btn-drive-connect">Conectar con Google Drive</button>
+             </div>`
+      }
+      <p id="drive-status" class="muted" style="margin-top:8px">${ultimaSync ? `Última sincronización: ${ultimaSync.toLocaleTimeString("es-ES")}.` : ""}</p>
+      ${
+        conflicto
+          ? `<div class="twr-detail" style="margin-top:10px">
+               <p><strong>Conflicto detectado</strong></p>
+               <p class="muted">Otro dispositivo ha guardado en Drive desde la última vez que este lo supo. Elige qué versión conservar — la que descartes se pierde, así que si tienes dudas, mira antes en el otro dispositivo.</p>
+               <div class="btn-row">
+                 <button id="btn-conflict-remoto">Usar la versión de Drive</button>
+                 <button id="btn-conflict-local" class="link-btn danger">Usar la versión de este dispositivo</button>
+               </div>
+             </div>`
+          : ""
+      }
     </section>
 
     <section class="card">
@@ -163,37 +193,41 @@ export function renderSettings(container) {
 
   const driveStatus = container.querySelector("#drive-status");
 
-  container.querySelector("#btn-drive-save").addEventListener("click", async () => {
-    driveStatus.textContent = "Guardando en Drive…";
-    try {
-      const resultado = await guardarEnDrive(store.exportJson());
-      driveStatus.textContent = `Guardado en Drive (${resultado.modo === "creado" ? "fichero nuevo" : "actualizado"}) a las ${new Date().toLocaleTimeString("es-ES")}.`;
-    } catch (e) {
-      driveStatus.textContent = "";
-      alert(`No se pudo guardar en Drive: ${e.message}`);
+  container.querySelector("#btn-drive-connect")?.addEventListener("click", async (ev) => {
+    ev.target.disabled = true;
+    driveStatus.textContent = "Conectando…";
+    const ok = await conectarDrive({ interactivo: true });
+    if (!ok) {
+      ev.target.disabled = false;
+      driveStatus.textContent = "No se pudo conectar. Inténtalo de nuevo.";
+      return;
     }
+    renderSettings(container);
   });
 
-  container.querySelector("#btn-drive-load").addEventListener("click", async () => {
-    driveStatus.textContent = "Consultando Drive…";
-    try {
-      const resultado = await cargarDesdeDrive();
-      if (!resultado.encontrado) {
-        driveStatus.textContent = "";
-        alert('Todavía no hay ningún fichero guardado en Drive. Usa primero "Guardar en Drive".');
-        return;
-      }
-      driveStatus.textContent = "";
-      if (!confirm(`Se sustituirán TODOS los datos de este dispositivo por los guardados en Drive (${new Date(resultado.modifiedTime).toLocaleString("es-ES")}). ¿Continuar?`)) {
-        return;
-      }
-      store.importJson(resultado.contenido);
-      alert("Datos cargados desde Drive correctamente.");
-      location.reload();
-    } catch (e) {
-      driveStatus.textContent = "";
-      alert(`No se pudo cargar desde Drive: ${e.message}`);
-    }
+  container.querySelector("#btn-drive-sync-now")?.addEventListener("click", async (ev) => {
+    ev.target.disabled = true;
+    driveStatus.textContent = "Sincronizando…";
+    await empujarAhora();
+    renderSettings(container);
+  });
+
+  container.querySelector("#btn-drive-disconnect")?.addEventListener("click", () => {
+    if (!confirm("¿Desconectar este dispositivo de Drive? Tus datos seguirán aquí en local, pero dejarán de sincronizarse automáticamente hasta que vuelvas a conectar.")) return;
+    desconectarDrive();
+    renderSettings(container);
+  });
+
+  container.querySelector("#btn-conflict-remoto")?.addEventListener("click", async () => {
+    await resolverConflicto("remoto");
+    alert("Cargados los datos de Drive.");
+    location.reload();
+  });
+
+  container.querySelector("#btn-conflict-local")?.addEventListener("click", async () => {
+    if (!confirm("Esto sustituirá en Drive lo que haya guardado el otro dispositivo por lo que tienes aquí. ¿Continuar?")) return;
+    await resolverConflicto("local");
+    renderSettings(container);
   });
 
   container.querySelector("#save-benchmark-name").addEventListener("click", () => {
