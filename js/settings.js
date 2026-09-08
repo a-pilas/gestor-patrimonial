@@ -174,7 +174,8 @@ export function renderSettings(container) {
 
     <section class="card">
       <h3>Acerca de</h3>
-      <p class="muted">Gestor patrimonial. Los datos se guardan en este navegador, con copia de seguridad manual en Google Drive. Pendiente: un análisis look-through de la composición interna de los fondos.</p>
+      <p class="muted">Gestor patrimonial — app personal para el seguimiento del patrimonio familiar. Los datos se guardan en este navegador y, si conectas Google Drive arriba, se sincronizan automáticamente entre todos tus dispositivos (misma contraseña incluida).</p>
+      <p class="muted">Construida por fases con Claude Code: seguimiento de inmuebles y deudas · visualizaciones y rentabilidad real (TWR) · fiscalidad española (IRPF del ahorro, Patrimonio, "¿y si vendo todo?") · alertas de desviación, concentración y vencimientos, con registro de decisiones del asesor · proyección de jubilación y simuladores de compra de vivienda · sincronización automática multi-dispositivo con Drive · X-Ray look-through (geografía, divisa y conclusiones automáticas). Pendiente: seguimiento de costes (TER, comisiones de custodia/gestión/asesoramiento) y concentración real por emisor dentro de los fondos.</p>
     </section>
   `;
 
