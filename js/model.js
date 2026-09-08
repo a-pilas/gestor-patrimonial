@@ -57,6 +57,16 @@ export const LIQUIDEZ_OPERATIVA_SUBCLASSES = ["Cuenta corriente", "Cuenta remune
 export const DEFAULT_XRAY_REVISION_DIAS_AVISO = 180;
 export const DEFAULT_CONCENTRACION_GEOGRAFICA_UMBRAL_PCT = 40;
 
+// Costes recurrentes estimados por activo financiero (opcional, se rellena
+// poco a poco igual que el look-through). Cada campo es un %/año sobre el
+// valor actual; se suman para el coste total estimado del activo.
+export const COST_FIELDS = [
+  { key: "terPct", label: "TER anual del fondo (%, si aplica)" },
+  { key: "custodiaPct", label: "Comisión de custodia (%/año)" },
+  { key: "gestionPct", label: "Comisión de gestión (%/año)" },
+  { key: "asesoramientoPct", label: "Comisión de asesoramiento externo (%/año)" },
+];
+
 // Tramos progresivos del IRPF sobre la base del ahorro (2025-2026). Se
 // guardan en meta para poder corregirlos desde Ajustes si cambia la
 // normativa, en vez de quedar fijos en el código.

@@ -1,12 +1,27 @@
 import { store } from "./store.js";
-import { gananciasRealizadasEnAño, dividendosEnAño, comisionesEnAño, cuotaProgresiva, cuotaPatrimonioEstimada, simulacionVenderTodoHoy } from "./metrics.js";
+import {
+  gananciasRealizadasEnAño,
+  dividendosEnAño,
+  comisionesEnAño,
+  cuotaProgresiva,
+  cuotaPatrimonioEstimada,
+  simulacionVenderTodoHoy,
+  coberturaCostes,
+  costeAnualEstimado,
+} from "./metrics.js";
 
 // Recuerda el año seleccionado entre renders (p.ej. al volver a esta pestaña).
 let selectedYear = null;
+let showPendientesCostes = false;
 
 function fmtEUR(n) {
   if (n == null || isNaN(n)) return "—";
   return Number(n).toLocaleString("es-ES", { style: "currency", currency: "EUR" });
+}
+
+function fmtPct1(n) {
+  if (n == null || isNaN(n)) return "—";
+  return `${n.toFixed(1)} %`;
 }
 
 function aniosDisponibles(data) {
@@ -30,6 +45,8 @@ export function renderFiscal(container) {
   const cuota = cuotaProgresiva(Math.max(0, baseAhorro), tramos);
   const tramosOrdenados = [...tramos].sort((a, b) => (a.hasta ?? Infinity) - (b.hasta ?? Infinity));
 
+  const coberturaCostesData = coberturaCostes();
+  const costes = costeAnualEstimado();
   const patrimonio = cuotaPatrimonioEstimada();
   const currentYear = new Date().getFullYear();
   const simulacion = simulacionVenderTodoHoy(currentYear);
@@ -68,6 +85,43 @@ export function renderFiscal(container) {
     <section class="card">
       <h3>Comisiones pagadas en ${year}</h3>
       <div class="kpi-row"><span>Total</span><span class="neg">${fmtEUR(comisiones)}</span></div>
+    </section>
+
+    <section class="card">
+      <h3>Seguimiento de costes recurrentes</h3>
+      <p class="muted">A diferencia de las comisiones de arriba (puntuales, ya cobradas), esto es una estimación de lo que te cuesta cada año mantener lo que tienes: TER de los fondos, custodia, gestión y asesoramiento externo. Rellénalo poco a poco en Activos — no hace falta completarlo todo de golpe, empieza por tus mayores posiciones.</p>
+      <div class="kpi-row"><span>Con datos de costes introducidos</span><span>${fmtEUR(coberturaCostesData.valorConDatos)} de ${fmtEUR(coberturaCostesData.total)} (${fmtPct1(coberturaCostesData.pctConDatos)})</span></div>
+      ${
+        costes.valorConDatos > 0
+          ? `<div class="kpi-row"><span>Coste anual estimado (sobre lo analizado)</span><span class="neg">${fmtEUR(costes.totalEUR)} (${fmtPct1(costes.pctPonderado)})</span></div>
+             <div class="table-wrap"><table class="table">
+              <thead><tr><th>Activo</th><th>Entidad</th><th>Coste total</th><th>€/año estimado</th></tr></thead>
+              <tbody>${costes.detalle
+                .map(
+                  (d) =>
+                    `<tr><td>${d.asset.name}</td><td>${d.entidad?.name || "—"}</td><td>${fmtPct1(d.pct)}</td><td class="neg">${fmtEUR(d.costeEUR)}</td></tr>`
+                )
+                .join("")}</tbody>
+            </table></div>`
+          : `<p class="muted">Añade TER, custodia, gestión o asesoramiento a algún activo en Activos para ver esto.</p>`
+      }
+      ${
+        coberturaCostesData.sinDatos.length
+          ? `<button type="button" id="btn-toggle-pendientes-costes" class="link-btn">${showPendientesCostes ? "Ocultar" : "Ver"} pendiente de rellenar (${coberturaCostesData.sinDatos.length})</button>
+             ${
+               showPendientesCostes
+                 ? `<div class="table-wrap"><table class="table">
+                      <thead><tr><th>Activo</th><th>Valor</th></tr></thead>
+                      <tbody>${coberturaCostesData.sinDatos
+                        .slice(0, 10)
+                        .map((r) => `<tr><td>${r.asset.name}</td><td>${fmtEUR(r.value)}</td></tr>`)
+                        .join("")}</tbody>
+                    </table></div>
+                    ${coberturaCostesData.sinDatos.length > 10 ? `<p class="muted">Y ${coberturaCostesData.sinDatos.length - 10} más.</p>` : ""}`
+                 : ""
+             }`
+          : ""
+      }
     </section>
 
     <section class="card">
@@ -111,6 +165,11 @@ export function renderFiscal(container) {
 
   container.querySelector("#fiscal-year").addEventListener("change", (ev) => {
     selectedYear = Number(ev.target.value);
+    renderFiscal(container);
+  });
+
+  container.querySelector("#btn-toggle-pendientes-costes")?.addEventListener("click", () => {
+    showPendientesCostes = !showPendientesCostes;
     renderFiscal(container);
   });
 }

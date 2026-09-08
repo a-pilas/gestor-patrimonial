@@ -1,4 +1,4 @@
-import { ASSET_CLASSES, REAL_ESTATE_SUBCLASSES, GEO_REGIONS, GEO_REGIONS_EUR, LIQUIDEZ_OPERATIVA_SUBCLASSES } from "./model.js";
+import { ASSET_CLASSES, REAL_ESTATE_SUBCLASSES, GEO_REGIONS, GEO_REGIONS_EUR, LIQUIDEZ_OPERATIVA_SUBCLASSES, COST_FIELDS } from "./model.js";
 import { store, latestPositionsByAssetEntity, latestLiabilityPositions, assetById, entityById } from "./store.js";
 
 // El precio de compra de un inmueble físico cuenta como capital aportado a ese
@@ -1036,4 +1036,51 @@ export function estadoRevisionXray() {
   const hoy = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00");
   const dias = Math.round((hoy - new Date(ultima + "T00:00:00")) / 86400000);
   return { ultima, diasDesde: dias, toca: dias >= diasAviso };
+}
+
+// --- Seguimiento de costes ---
+
+// Igual que coberturaLookThrough() pero para el desglose de costes
+// (TER/custodia/gestión/asesoramiento) opcional por activo.
+export function coberturaCostes() {
+  let total = 0;
+  const conDatos = [];
+  const sinDatos = [];
+  for (const p of latestPositionsByAssetEntity()) {
+    const asset = assetById(p.assetId);
+    if (!asset || !esInversionFinanciera(asset)) continue;
+    const value = valueOfPosition(p);
+    total += value;
+    (asset.costes ? conDatos : sinDatos).push({ asset, value });
+  }
+  sinDatos.sort((a, b) => b.value - a.value);
+  const valorConDatos = conDatos.reduce((s, r) => s + r.value, 0);
+  return { total, valorConDatos, pctConDatos: total ? (valorConDatos / total) * 100 : 0, sinDatos };
+}
+
+function costeTotalPctActivo(asset) {
+  return COST_FIELDS.reduce((s, f) => s + (Number(asset.costes?.[f.key]) || 0), 0);
+}
+
+// Coste anual estimado (€/año) del patrimonio financiero, sumando para cada
+// activo con costes introducidos el % total (TER + custodia + gestión +
+// asesoramiento) sobre su valor actual. Los campos que dejes en blanco de un
+// activo cuentan como 0 en la suma — así que el coste real de ese activo
+// concreto puede ser algo mayor si te falta algún dato por rellenar.
+export function costeAnualEstimado() {
+  const detalle = [];
+  let totalEUR = 0;
+  let valorConDatos = 0;
+  for (const p of latestPositionsByAssetEntity()) {
+    const asset = assetById(p.assetId);
+    if (!asset || !esInversionFinanciera(asset) || !asset.costes) continue;
+    const value = valueOfPosition(p);
+    const pct = costeTotalPctActivo(asset);
+    const costeEUR = value * (pct / 100);
+    valorConDatos += value;
+    totalEUR += costeEUR;
+    detalle.push({ asset, entidad: entityById(p.entityId), value, pct, costeEUR });
+  }
+  detalle.sort((a, b) => b.costeEUR - a.costeEUR);
+  return { totalEUR, valorConDatos, pctPonderado: valorConDatos ? (totalEUR / valorConDatos) * 100 : 0, detalle };
 }

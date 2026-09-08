@@ -6,6 +6,7 @@ import {
   SUBCLASSES_CON_VENCIMIENTO,
   GEO_REGIONS,
   LIQUIDEZ_OPERATIVA_SUBCLASSES,
+  COST_FIELDS,
 } from "./model.js";
 import { store } from "./store.js";
 
@@ -103,6 +104,12 @@ export function renderCatalog(container) {
                     (r) => `<label>${r.label} (%) <input name="geo_${r.key}" type="number" min="0" max="100" step="any" value="${editing?.geoBreakdown?.[r.key] ?? ""}" /></label>`
                   ).join("")}
                 </div>
+                <div id="costes-field" style="display:none">
+                  <p class="muted">Opcional: costes recurrentes anuales, para el seguimiento de costes de Fiscalidad. Déjalo en blanco lo que no sepas o no aplique (p.ej. TER en una acción individual) — no hace falta rellenarlo todo de golpe.</p>
+                  ${COST_FIELDS.map(
+                    (f) => `<label>${f.label} <input name="coste_${f.key}" type="number" min="0" step="any" value="${editing?.costes?.[f.key] ?? ""}" /></label>`
+                  ).join("")}
+                </div>
                 <div class="btn-row">
                   <button type="submit">${editing ? "Guardar cambios" : "Añadir activo"}</button>
                   ${editing ? `<button type="button" id="cancel-edit-asset">Cancelar</button>` : ""}
@@ -132,7 +139,7 @@ export function renderCatalog(container) {
                         : ""
                     }${a.vencimiento ? ` <span class="muted">(vence ${a.vencimiento})</span>` : ""}${
                       a.geoBreakdown ? ` <span class="muted">(look-through${a.hedged ? " · hedged" : ""})</span>` : ""
-                    }</td>
+                    }${a.costes ? ` <span class="muted">(costes)</span>` : ""}</td>
                     <td>${a.isin || "—"}</td>
                     <td>${a.riskScore ?? "—"}</td>
                     <td>
@@ -156,6 +163,7 @@ export function renderCatalog(container) {
   const viviendaHabitualField = container.querySelector("#vivienda-habitual-field");
   const vencimientoField = container.querySelector("#vencimiento-field");
   const lookthroughField = container.querySelector("#lookthrough-field");
+  const costesField = container.querySelector("#costes-field");
   const rentedCheckbox = container.querySelector('input[name="rented"]');
   const rentaAnualField = container.querySelector("#renta-anual-field");
   if (rentedCheckbox) {
@@ -191,17 +199,22 @@ export function renderCatalog(container) {
     function refreshLookthroughField() {
       lookthroughField.style.display = esFinancieroLookThrough(classSelect.value, subclassSelect.value) ? "" : "none";
     }
+    function refreshCostesField() {
+      costesField.style.display = esFinancieroLookThrough(classSelect.value, subclassSelect.value) ? "" : "none";
+    }
     classSelect.addEventListener("change", () => {
       refreshSubclasses();
       refreshMixField();
       refreshRealEstateFields();
       refreshVencimientoField();
       refreshLookthroughField();
+      refreshCostesField();
     });
     subclassSelect.addEventListener("change", () => {
       refreshRealEstateFields();
       refreshVencimientoField();
       refreshLookthroughField();
+      refreshCostesField();
     });
     if (!editing) refreshSubclasses();
     else {
@@ -213,6 +226,7 @@ export function renderCatalog(container) {
     refreshRealEstateFields();
     refreshVencimientoField();
     refreshLookthroughField();
+    refreshCostesField();
   }
 
   container.querySelector("#form-entity").addEventListener("submit", (ev) => {
@@ -237,6 +251,16 @@ export function renderCatalog(container) {
         });
       }
     }
+    let costes = null;
+    if (esFinanciero) {
+      const valoresCoste = COST_FIELDS.map((f) => fd.get(`coste_${f.key}`));
+      if (valoresCoste.some((v) => v !== "" && v != null)) {
+        costes = {};
+        COST_FIELDS.forEach((f, i) => {
+          costes[f.key] = valoresCoste[i] === "" || valoresCoste[i] == null ? null : Number(valoresCoste[i]);
+        });
+      }
+    }
     const payload = {
       entityId: fd.get("entityId") || null,
       name: fd.get("name").trim(),
@@ -254,6 +278,7 @@ export function renderCatalog(container) {
       vencimiento: SUBCLASSES_CON_VENCIMIENTO.includes(fd.get("subclass")) && fd.get("vencimiento") ? fd.get("vencimiento") : null,
       hedged: esFinanciero ? fd.get("hedged") === "on" : false,
       geoBreakdown,
+      costes,
     };
     if (editingAssetId) {
       store.updateAsset(editingAssetId, payload);
