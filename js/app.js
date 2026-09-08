@@ -54,10 +54,13 @@ renderTab();
 
 // Si este dispositivo ya se conectó a Drive antes, intenta reengancharse en
 // segundo plano sin interrumpir el arranque (funciona en local mientras
-// tanto). Si trae datos más recientes, se vuelve a pintar la pestaña
-// actual para reflejarlos sin que haga falta recargar a mano.
+// tanto). Solo se repinta la pestaña actual cuando de verdad llegan datos
+// nuevos de Drive (pull) o hay un conflicto que resolver — nunca tras un
+// push rutinario de tus propios cambios, porque eso borraría cualquier
+// edición sin guardar que tengas en pantalla (p.ej. un simulador a medio
+// rellenar antes de pulsar "Calcular").
 onSyncStatus((estado) => {
-  if (estado.tipo === "sincronizado" || estado.tipo === "conflicto") renderTab();
+  if (estado.tipo === "conflicto" || (estado.tipo === "sincronizado" && estado.origen === "pull")) renderTab();
 });
 conectarDrive({ interactivo: false });
 

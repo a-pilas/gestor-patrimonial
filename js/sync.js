@@ -73,7 +73,7 @@ async function pullInicial() {
   const resultado = await cargarDesdeDrive();
   if (resultado.encontrado) {
     aplicarRemoto(resultado.contenido, resultado.modifiedTime);
-    notificar({ tipo: "sincronizado", cuando: new Date() });
+    notificar({ tipo: "sincronizado", cuando: new Date(), origen: "pull" });
   } else {
     // Drive no tiene fichero todavía: este dispositivo es el primero en
     // conectar, así que sube lo que ya hay en local para inicializarlo.
@@ -129,7 +129,7 @@ export async function empujarAhora() {
     const resultado = await guardarEnDrive(store.exportJson());
     guardarEstadoSync({ lastKnownModifiedTime: resultado.modifiedTime });
     ultimoConflicto = null;
-    notificar({ tipo: "sincronizado", cuando: new Date() });
+    notificar({ tipo: "sincronizado", cuando: new Date(), origen: "push" });
   } catch (e) {
     notificar({ tipo: "error", mensaje: e.message });
   } finally {
@@ -149,7 +149,7 @@ export async function resolverConflicto(eleccion) {
     guardarEstadoSync({ lastKnownModifiedTime: resultado.modifiedTime });
   }
   ultimoConflicto = null;
-  notificar({ tipo: "sincronizado", cuando: new Date() });
+  notificar({ tipo: "sincronizado", cuando: new Date(), origen: eleccion === "remoto" ? "pull" : "push" });
 }
 
 export { haEstadoConectadoAntes };
