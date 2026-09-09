@@ -392,8 +392,16 @@ function renderBulkUpdate(container, data) {
     const latest = latestPosByAsset.get(a.id);
     return latest && valueOfPosition(latest) <= 0;
   };
-  const simpleAssets = data.assets.filter((a) => !isRealEstateAsset(a) && !estaZeroed(a));
-  const realEstateAssets = data.assets.filter((a) => isRealEstateAsset(a) && !estaZeroed(a));
+  // Orden alfabético por entidad y, dentro de cada una, por nombre del
+  // activo — para que la lista sea predecible y fácil de recorrer al
+  // actualizar valores uno a uno cada mes.
+  function porEntidadYNombre(a, b) {
+    const entityCmp = entityName(a.entityId).localeCompare(entityName(b.entityId), "es");
+    if (entityCmp !== 0) return entityCmp;
+    return a.name.localeCompare(b.name, "es");
+  }
+  const simpleAssets = data.assets.filter((a) => !isRealEstateAsset(a) && !estaZeroed(a)).sort(porEntidadYNombre);
+  const realEstateAssets = data.assets.filter((a) => isRealEstateAsset(a) && !estaZeroed(a)).sort(porEntidadYNombre);
 
   function valuationRowHtml(v) {
     return `<div class="btn-row bulk-re-source-row">
