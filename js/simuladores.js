@@ -19,6 +19,11 @@ const REF_FINANCIACION_PCT = 80;
 const REF_ESFUERZO_PCT = 35;
 const REF_COLCHON_MIN_MESES = 3;
 
+function fmtTipo(n) {
+  if (n == null || isNaN(n)) return "—";
+  return `${Number(n).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`;
+}
+
 function fmtMeses(n) {
   if (n == null || isNaN(n)) return "—";
   return `${Number(n).toLocaleString("es-ES", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} meses`;
@@ -34,10 +39,10 @@ function resultadoCompraHtml(r) {
       : `<p class="muted">Para ver qué % de tus ingresos se llevaría la cuota, indica tus ingresos netos mensuales en Ajustes → Simulador — Compra de propiedad.</p>`;
   const tipoHipotecaHtml =
     r.tipoHipoteca === "variable"
-      ? `<div class="kpi-row"><span>Tipo de interés (Euríbor + diferencial)</span><span>${fmtPct(r.tipoInicialPct)}</span></div>`
+      ? `<div class="kpi-row"><span>Tipo de interés (Euríbor + diferencial)</span><span>${fmtTipo(r.tipoInicialPct)}</span></div>`
       : r.tipoHipoteca === "mixta"
-      ? `<div class="kpi-row"><span>Tipo fijo inicial · después Euríbor + diferencial</span><span>${fmtPct(r.tipoInicialPct)} · ${fmtPct(r.tipoVariablePct)}</span></div>`
-      : `<div class="kpi-row"><span>Tipo de interés fijo</span><span>${fmtPct(r.tipoInicialPct)}</span></div>`;
+      ? `<div class="kpi-row"><span>Tipo fijo inicial · después Euríbor + diferencial</span><span>${fmtTipo(r.tipoInicialPct)} · ${fmtTipo(r.tipoVariablePct)}</span></div>`
+      : `<div class="kpi-row"><span>Tipo de interés fijo</span><span>${fmtTipo(r.tipoInicialPct)}</span></div>`;
 
   const estresHtml = r.estres
     ? `<p class="muted" style="margin-top:14px"><strong>Prueba de estrés: si sube el Euríbor</strong></p>
@@ -47,7 +52,7 @@ function resultadoCompraHtml(r) {
            .map(
              (e) => `<tr>
                <td>${e.subida === 0 ? "Actual" : `+${e.subida} pt`}</td>
-               <td>${fmtPct(e.tipoPct)}</td>
+               <td>${fmtTipo(e.tipoPct)}</td>
                <td>${fmtEUR(e.cuota)}</td>
                <td>${fmtEUR(e.cuotaTotal)}</td>
                ${r.ingresosMensuales > 0 ? `<td class="${e.esfuerzoTotalPct > REF_ESFUERZO_PCT ? "neg" : ""}">${fmtPct(e.esfuerzoTotalPct)}</td>` : ""}
