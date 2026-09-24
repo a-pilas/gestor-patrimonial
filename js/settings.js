@@ -158,6 +158,10 @@ export function renderSettings(container) {
       <label>Otros gastos de compra — notaría, registro, gestoría (%)
         <input id="otros-gastos-compra" type="number" step="any" min="0" value="${data.meta.otrosGastosCompraPct}" />
       </label>
+      <label>Ingresos netos mensuales del hogar (€)
+        <input id="ingresos-mensuales-netos" type="number" step="any" min="0" value="${data.meta.ingresosMensualesNetos ?? ""}" placeholder="Nóminas y demás ingresos recurrentes, ya con impuestos descontados" />
+      </label>
+      <p class="muted">Se usa para calcular qué % de tus ingresos se llevaría la cuota. Si quieres que cuente el alquiler que ya cobras, súmalo aquí.</p>
       <div class="btn-row" style="margin-top:10px">
         <button id="save-compra-propiedad">Guardar</button>
       </div>
@@ -413,7 +417,13 @@ export function renderSettings(container) {
       alert("Añade al menos un tramo de ITP con su porcentaje.");
       return;
     }
-    store.updateMeta({ ivaViviendaNuevaPct, ajdViviendaNuevaPct, otrosGastosCompraPct, tramosItpVivienda });
+    const ingresosRaw = container.querySelector("#ingresos-mensuales-netos").value.trim();
+    const ingresosMensualesNetos = ingresosRaw === "" ? null : Number(ingresosRaw);
+    if (ingresosMensualesNetos !== null && (isNaN(ingresosMensualesNetos) || ingresosMensualesNetos < 0)) {
+      alert("Introduce unos ingresos válidos.");
+      return;
+    }
+    store.updateMeta({ ivaViviendaNuevaPct, ajdViviendaNuevaPct, otrosGastosCompraPct, tramosItpVivienda, ingresosMensualesNetos });
     alert("Guardado.");
   });
 

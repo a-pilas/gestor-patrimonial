@@ -713,8 +713,21 @@ export function simulacionCompraPropiedad({ precio, tipoVivienda, importeHipotec
   }
   const totalIntereses = cuotaMensual * meses - importeHipoteca;
 
-  const liquidezActual = patrimonioConsolidado().liquidez;
+  const consolidado = patrimonioConsolidado();
+  const liquidezActual = consolidado.liquidez;
   const patrimonioNetoActual = patrimonioNeto();
+
+  // Patrimonio financiero "invertido" (sin cuentas corrientes/ahorro/depósitos,
+  // ni inmuebles): la entrada sale primero de la liquidez y solo si esta no
+  // alcanza se recurre a las inversiones. Un sobrante (p.ej. por la venta de
+  // la vivienda habitual) se asume que queda en cuenta, fuera de esta cifra.
+  const inversionFinancieraActual = consolidado.inversionFinanciera;
+  const faltanteDeInversiones = Math.max(0, entradaNecesaria - liquidezActual);
+  const inversionFinancieraTras = inversionFinancieraActual - faltanteDeInversiones;
+
+  const cuotaMensualActual = totalCuotaMensual();
+  const ingresosMensuales = Number(data.meta.ingresosMensualesNetos) || 0;
+  const pctIngresos = (cuota) => (ingresosMensuales > 0 ? (cuota / ingresosMensuales) * 100 : null);
 
   return {
     impuestos,
@@ -728,8 +741,17 @@ export function simulacionCompraPropiedad({ precio, tipoVivienda, importeHipotec
     liquidezRestante: liquidezActual - entradaNecesaria,
     patrimonioNetoActual,
     impactoPatrimonioNeto: -(impuestos + otrosGastos),
-    cuotaMensualActual: totalCuotaMensual(),
-    cuotaMensualTotalDespues: totalCuotaMensual() + cuotaMensual,
+    inversionFinancieraActual,
+    faltanteDeInversiones,
+    inversionFinancieraTras,
+    financiacionSobrePrecioPct: precio > 0 ? (importeHipoteca / precio) * 100 : null,
+    financiacionSobreCostePct: costeTotalAdquisicion > 0 ? (importeHipoteca / costeTotalAdquisicion) * 100 : null,
+    ingresosMensuales,
+    esfuerzoActualPct: pctIngresos(cuotaMensualActual),
+    esfuerzoEstaHipotecaPct: pctIngresos(cuotaMensual),
+    esfuerzoTotalPct: pctIngresos(cuotaMensualActual + cuotaMensual),
+    cuotaMensualActual,
+    cuotaMensualTotalDespues: cuotaMensualActual + cuotaMensual,
   };
 }
 

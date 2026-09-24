@@ -174,6 +174,7 @@ export function emptyData() {
       compraPropiedadTipoInteresPct: null,
       compraPropiedadPlazoAnios: null,
       compraPropiedadValorVentaViviendaHabitual: null,
+      ingresosMensualesNetos: null,
       xrayUltimaRevision: null,
       xrayRevisionDiasAviso: DEFAULT_XRAY_REVISION_DIAS_AVISO,
       concentracionGeograficaUmbralPct: DEFAULT_CONCENTRACION_GEOGRAFICA_UMBRAL_PCT,

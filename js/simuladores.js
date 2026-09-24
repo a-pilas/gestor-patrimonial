@@ -6,7 +6,26 @@ function fmtEUR(n) {
   return Number(n).toLocaleString("es-ES", { style: "currency", currency: "EUR" });
 }
 
+function fmtPct(n) {
+  if (n == null || isNaN(n)) return "—";
+  return `${Number(n).toLocaleString("es-ES", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`;
+}
+
+// Referencias habituales del mercado español (no son límites legales): los
+// bancos suelen financiar hasta ~80% del menor entre tasación y precio en
+// vivienda habitual (~60-70% en segunda residencia), y recomiendan que las
+// cuotas totales no superen ~35% de los ingresos netos.
+const REF_FINANCIACION_PCT = 80;
+const REF_ESFUERZO_PCT = 35;
+
 function resultadoCompraHtml(r) {
+  const cambioInversion = r.inversionFinancieraTras - r.inversionFinancieraActual;
+  const esfuerzoHtml =
+    r.ingresosMensuales > 0
+      ? `<div class="kpi-row"><span>Cuota de esta hipoteca sobre tus ingresos</span><span>${fmtPct(r.esfuerzoEstaHipotecaPct)}</span></div>
+         <div class="kpi-row"><span>Cuotas totales sobre tus ingresos (hoy: ${fmtPct(r.esfuerzoActualPct)})</span><span class="${r.esfuerzoTotalPct > REF_ESFUERZO_PCT ? "neg" : ""}"><strong>${fmtPct(r.esfuerzoTotalPct)}</strong></span></div>
+         <p class="muted">Sobre ingresos netos de ${fmtEUR(r.ingresosMensuales)}/mes. Referencia habitual: que el total de cuotas no pase de ~${REF_ESFUERZO_PCT}% (recomendación prudencial, no un límite legal).</p>`
+      : `<p class="muted">Para ver qué % de tus ingresos se llevaría la cuota, indica tus ingresos netos mensuales en Ajustes → Simulador — Compra de propiedad.</p>`;
   return `
     <div class="kpi-row"><span>Impuestos de la operación</span><span>${fmtEUR(r.impuestos)}</span></div>
     <div class="kpi-row"><span>Otros gastos (notaría, registro, gestoría)</span><span>${fmtEUR(r.otrosGastos)}</span></div>
@@ -15,9 +34,20 @@ function resultadoCompraHtml(r) {
     <div class="kpi-row"><span><strong>${r.entradaNecesaria >= 0 ? "Entrada necesaria de tu liquidez" : "Sobrante tras cubrir la entrada"}</strong></span><span class="${r.entradaNecesaria >= 0 ? "" : "pos"}"><strong>${fmtEUR(Math.abs(r.entradaNecesaria))}</strong></span></div>
     <div class="kpi-row"><span>Liquidez disponible hoy</span><span>${fmtEUR(r.liquidezActual)}</span></div>
     <div class="kpi-row"><span>Liquidez restante tras la entrada</span><span class="${r.liquidezRestante >= 0 ? "" : "neg"}">${fmtEUR(r.liquidezRestante)}</span></div>
+    <div class="kpi-row"><span>Patrimonio financiero invertido hoy</span><span>${fmtEUR(r.inversionFinancieraActual)}</span></div>
+    <div class="kpi-row"><span><strong>Patrimonio financiero invertido tras la operación</strong></span><span class="${cambioInversion < 0 ? "neg" : ""}"><strong>${fmtEUR(r.inversionFinancieraTras)}</strong></span></div>
+    <p class="muted">Solo inversiones financieras (sin cuentas corrientes, cuentas de ahorro ni depósitos, ni inmuebles). La entrada se paga primero de esa liquidez${
+      r.faltanteDeInversiones > 0
+        ? `; como no alcanza, hay que vender ${fmtEUR(r.faltanteDeInversiones)} de inversiones (sin contar el coste fiscal de venderlas)`
+        : " y, al alcanzar, tu patrimonio invertido no cambia"
+    }.</p>
+    <div class="kpi-row"><span>Financiación sobre el precio de compra</span><span class="${r.financiacionSobrePrecioPct > REF_FINANCIACION_PCT ? "neg" : ""}">${fmtPct(r.financiacionSobrePrecioPct)}</span></div>
+    <div class="kpi-row"><span>Financiación sobre el coste total (con impuestos y gastos)</span><span>${fmtPct(r.financiacionSobreCostePct)}</span></div>
+    <p class="muted">Referencia habitual: los bancos financian hasta ~${REF_FINANCIACION_PCT}% del menor entre precio y tasación en vivienda habitual, y suelen bajar a ~60-70% en segunda residencia o inversión.</p>
     <div class="kpi-row"><span>Cuota mensual de esta hipoteca</span><span>${fmtEUR(r.cuotaMensual)}</span></div>
     <div class="kpi-row"><span>Total intereses a lo largo del préstamo</span><span>${fmtEUR(r.totalIntereses)}</span></div>
     <div class="kpi-row"><span>Cuota mensual total (con hipotecas actuales)</span><span>${fmtEUR(r.cuotaMensualTotalDespues)}</span></div>
+    ${esfuerzoHtml}
     <div class="kpi-row"><span>Patrimonio neto actual</span><span>${fmtEUR(r.patrimonioNetoActual)}</span></div>
     <div class="kpi-row"><span><strong>Impacto inmediato en patrimonio neto</strong></span><span class="neg"><strong>${fmtEUR(r.impactoPatrimonioNeto)}</strong></span></div>
     <p class="muted">El precio pagado se convierte en un activo del mismo valor, así que el patrimonio neto solo baja por los costes de la operación (impuestos + gastos) — el precio en sí no te empobrece, solo cambia de forma.</p>
