@@ -685,7 +685,62 @@ export function duracionPatrimonio({ gastoAnual, rentabilidadPct, inflacionPct, 
 // en un activo del mismo valor, así que el patrimonio neto solo baja por
 // los costes de la operación (impuestos + otros gastos), no por el precio
 // en sí — la entrada y la hipoteca son solo la forma de financiarlo.
-export function simulacionCompraPropiedad({ precio, tipoVivienda, importeHipoteca, tipoInteresPct, plazoAnios, valorVentaViviendaHabitual }) {
+// Cuota constante (sistema francés) de un capital a un tipo anual y plazo en meses.
+function cuotaFrancesa(capital, tipoAnualPct, meses) {
+  if (!(capital > 0) || !(meses > 0)) return 0;
+  const i = (Number(tipoAnualPct) || 0) / 100 / 12;
+  return i === 0 ? capital / meses : (capital * i * Math.pow(1 + i, meses)) / (Math.pow(1 + i, meses) - 1);
+}
+
+// Capital pendiente tras pagar `mesesPagados` cuotas de esa misma hipoteca.
+function saldoTrasMeses(capital, tipoAnualPct, meses, mesesPagados) {
+  const i = (Number(tipoAnualPct) || 0) / 100 / 12;
+  const cuota = cuotaFrancesa(capital, tipoAnualPct, meses);
+  if (i === 0) return capital - cuota * mesesPagados;
+  return capital * Math.pow(1 + i, mesesPagados) - (cuota * (Math.pow(1 + i, mesesPagados) - 1)) / i;
+}
+
+// Cuotas e intereses de una hipoteca fija, variable o mixta, suponiendo que
+// el Euríbor (más `subidaPts` puntos, para las pruebas de estrés) se mantiene
+// constante — una simplificación deliberada, no una previsión de tipos.
+// Mixta: `mesesFijos` a tipo fijo y luego Euríbor + diferencial sobre el
+// capital que quede pendiente. Devuelve `cuotaTrasFijo` solo en la mixta.
+function escenarioHipoteca({ tipoHipoteca, capital, meses, tipoFijoPct, euriborPct, diferencialPct, mesesFijos }, subidaPts = 0) {
+  const tipoVariablePct = (Number(euriborPct) || 0) + subidaPts + (Number(diferencialPct) || 0);
+  if (tipoHipoteca === "variable") {
+    const cuota = cuotaFrancesa(capital, tipoVariablePct, meses);
+    return { cuotaInicial: cuota, cuotaTrasFijo: null, tipoInicialPct: tipoVariablePct, tipoVariablePct, intereses: cuota * meses - capital };
+  }
+  if (tipoHipoteca === "mixta") {
+    const mFijos = Math.min(Math.max(0, mesesFijos), meses);
+    const cuota1 = cuotaFrancesa(capital, tipoFijoPct, meses);
+    const saldo = saldoTrasMeses(capital, tipoFijoPct, meses, mFijos);
+    const resto = meses - mFijos;
+    const cuota2 = cuotaFrancesa(saldo, tipoVariablePct, resto);
+    return {
+      cuotaInicial: cuota1,
+      cuotaTrasFijo: cuota2,
+      tipoInicialPct: Number(tipoFijoPct) || 0,
+      tipoVariablePct,
+      intereses: cuota1 * mFijos + cuota2 * resto - capital,
+    };
+  }
+  const cuota = cuotaFrancesa(capital, tipoFijoPct, meses);
+  return { cuotaInicial: cuota, cuotaTrasFijo: null, tipoInicialPct: Number(tipoFijoPct) || 0, tipoVariablePct: null, intereses: cuota * meses - capital };
+}
+
+export function simulacionCompraPropiedad({
+  precio,
+  tipoVivienda,
+  importeHipoteca,
+  tipoHipoteca = "fija",
+  tipoInteresPct,
+  euriborPct,
+  diferencialPct,
+  aniosFijos,
+  plazoAnios,
+  valorVentaViviendaHabitual,
+}) {
   const data = store.get();
   const otrosGastosPct = Number(data.meta.otrosGastosCompraPct) || 0;
 
@@ -702,16 +757,19 @@ export function simulacionCompraPropiedad({ precio, tipoVivienda, importeHipotec
   // venta (eso queda fuera del alcance de este simulador).
   const entradaNecesaria = costeTotalAdquisicion - importeHipoteca - (Number(valorVentaViviendaHabitual) || 0);
 
-  const tipoMensual = (Number(tipoInteresPct) || 0) / 100 / 12;
   const meses = Math.round((Number(plazoAnios) || 0) * 12);
-  let cuotaMensual = 0;
-  if (importeHipoteca > 0 && meses > 0) {
-    cuotaMensual =
-      tipoMensual === 0
-        ? importeHipoteca / meses
-        : (importeHipoteca * tipoMensual * Math.pow(1 + tipoMensual, meses)) / (Math.pow(1 + tipoMensual, meses) - 1);
-  }
-  const totalIntereses = cuotaMensual * meses - importeHipoteca;
+  const paramsHipoteca = {
+    tipoHipoteca,
+    capital: importeHipoteca,
+    meses,
+    tipoFijoPct: tipoInteresPct,
+    euriborPct,
+    diferencialPct,
+    mesesFijos: Math.round((Number(aniosFijos) || 0) * 12),
+  };
+  const base = escenarioHipoteca(paramsHipoteca);
+  const cuotaMensual = base.cuotaInicial;
+  const totalIntereses = importeHipoteca > 0 && meses > 0 ? base.intereses : 0;
 
   const consolidado = patrimonioConsolidado();
   const liquidezActual = consolidado.liquidez;
@@ -729,7 +787,39 @@ export function simulacionCompraPropiedad({ precio, tipoVivienda, importeHipotec
   const ingresosMensuales = Number(data.meta.ingresosMensualesNetos) || 0;
   const pctIngresos = (cuota) => (ingresosMensuales > 0 ? (cuota / ingresosMensuales) * 100 : null);
 
+  // Prueba de estrés (solo variable/mixta): el Euríbor sube de golpe X puntos
+  // — desde el primer día en la variable, al acabar el periodo fijo en la
+  // mixta — y se mantiene así. Es el peor caso a propósito, no una previsión.
+  const estres =
+    tipoHipoteca === "fija"
+      ? null
+      : [0, 1, 2, 3].map((subida) => {
+          const e = escenarioHipoteca(paramsHipoteca, subida);
+          const cuota = tipoHipoteca === "mixta" ? e.cuotaTrasFijo : e.cuotaInicial;
+          return {
+            subida,
+            tipoPct: e.tipoVariablePct,
+            cuota,
+            cuotaTotal: cuotaMensualActual + cuota,
+            esfuerzoTotalPct: pctIngresos(cuotaMensualActual + cuota),
+          };
+        });
+
+  // Colchón: meses que cubre la liquidez (cuentas, ahorro y depósitos)
+  // frente a los gastos habituales del hogar más todas las cuotas de hipoteca.
+  const gastosMensualesHogar = Number(data.meta.gastosMensualesHogar) || 0;
+  const mesesColchon = (liquidez, cuotas) => (gastosMensualesHogar + cuotas > 0 ? Math.max(0, liquidez) / (gastosMensualesHogar + cuotas) : null);
+
   return {
+    tipoHipoteca,
+    tipoInicialPct: base.tipoInicialPct,
+    tipoVariablePct: base.tipoVariablePct,
+    cuotaTrasFijo: base.cuotaTrasFijo,
+    aniosFijos: Number(aniosFijos) || 0,
+    estres,
+    gastosMensualesHogar,
+    colchonHoyMeses: gastosMensualesHogar > 0 ? mesesColchon(liquidezActual, cuotaMensualActual) : null,
+    colchonTrasMeses: gastosMensualesHogar > 0 ? mesesColchon(liquidezActual - entradaNecesaria, cuotaMensualActual + cuotaMensual) : null,
     impuestos,
     otrosGastos,
     costeTotalAdquisicion,

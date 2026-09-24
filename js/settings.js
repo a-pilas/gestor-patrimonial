@@ -162,6 +162,10 @@ export function renderSettings(container) {
         <input id="ingresos-mensuales-netos" type="number" step="any" min="0" value="${data.meta.ingresosMensualesNetos ?? ""}" placeholder="Nóminas y demás ingresos recurrentes, ya con impuestos descontados" />
       </label>
       <p class="muted">Se usa para calcular qué % de tus ingresos se llevaría la cuota. Si quieres que cuente el alquiler que ya cobras, súmalo aquí.</p>
+      <label>Gastos mensuales habituales del hogar (€, sin cuotas de hipoteca)
+        <input id="gastos-mensuales-hogar" type="number" step="any" min="0" value="${data.meta.gastosMensualesHogar ?? ""}" placeholder="Vida diaria, suministros, seguros, impuestos..." />
+      </label>
+      <p class="muted">Se usa para calcular cuántos meses de colchón te quedarían tras la compra. Las cuotas de las hipotecas se suman aparte, no las incluyas aquí.</p>
       <div class="btn-row" style="margin-top:10px">
         <button id="save-compra-propiedad">Guardar</button>
       </div>
@@ -423,7 +427,13 @@ export function renderSettings(container) {
       alert("Introduce unos ingresos válidos.");
       return;
     }
-    store.updateMeta({ ivaViviendaNuevaPct, ajdViviendaNuevaPct, otrosGastosCompraPct, tramosItpVivienda, ingresosMensualesNetos });
+    const gastosRaw = container.querySelector("#gastos-mensuales-hogar").value.trim();
+    const gastosMensualesHogar = gastosRaw === "" ? null : Number(gastosRaw);
+    if (gastosMensualesHogar !== null && (isNaN(gastosMensualesHogar) || gastosMensualesHogar < 0)) {
+      alert("Introduce unos gastos válidos.");
+      return;
+    }
+    store.updateMeta({ ivaViviendaNuevaPct, ajdViviendaNuevaPct, otrosGastosCompraPct, tramosItpVivienda, ingresosMensualesNetos, gastosMensualesHogar });
     alert("Guardado.");
   });
 

@@ -17,6 +17,12 @@ function fmtPct(n) {
 // cuotas totales no superen ~35% de los ingresos netos.
 const REF_FINANCIACION_PCT = 80;
 const REF_ESFUERZO_PCT = 35;
+const REF_COLCHON_MIN_MESES = 3;
+
+function fmtMeses(n) {
+  if (n == null || isNaN(n)) return "—";
+  return `${Number(n).toLocaleString("es-ES", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} meses`;
+}
 
 function resultadoCompraHtml(r) {
   const cambioInversion = r.inversionFinancieraTras - r.inversionFinancieraActual;
@@ -26,6 +32,39 @@ function resultadoCompraHtml(r) {
          <div class="kpi-row"><span>Cuotas totales sobre tus ingresos (hoy: ${fmtPct(r.esfuerzoActualPct)})</span><span class="${r.esfuerzoTotalPct > REF_ESFUERZO_PCT ? "neg" : ""}"><strong>${fmtPct(r.esfuerzoTotalPct)}</strong></span></div>
          <p class="muted">Sobre ingresos netos de ${fmtEUR(r.ingresosMensuales)}/mes. Referencia habitual: que el total de cuotas no pase de ~${REF_ESFUERZO_PCT}% (recomendación prudencial, no un límite legal).</p>`
       : `<p class="muted">Para ver qué % de tus ingresos se llevaría la cuota, indica tus ingresos netos mensuales en Ajustes → Simulador — Compra de propiedad.</p>`;
+  const tipoHipotecaHtml =
+    r.tipoHipoteca === "variable"
+      ? `<div class="kpi-row"><span>Tipo de interés (Euríbor + diferencial)</span><span>${fmtPct(r.tipoInicialPct)}</span></div>`
+      : r.tipoHipoteca === "mixta"
+      ? `<div class="kpi-row"><span>Tipo fijo inicial · después Euríbor + diferencial</span><span>${fmtPct(r.tipoInicialPct)} · ${fmtPct(r.tipoVariablePct)}</span></div>`
+      : `<div class="kpi-row"><span>Tipo de interés fijo</span><span>${fmtPct(r.tipoInicialPct)}</span></div>`;
+
+  const estresHtml = r.estres
+    ? `<p class="muted" style="margin-top:14px"><strong>Prueba de estrés: si sube el Euríbor</strong></p>
+       <div class="table-wrap"><table class="table">
+         <thead><tr><th>Euríbor</th><th>Tipo</th><th>Cuota${r.tipoHipoteca === "mixta" ? " tras el periodo fijo" : ""}</th><th>Cuotas totales</th>${r.ingresosMensuales > 0 ? "<th>% ingresos</th>" : ""}</tr></thead>
+         <tbody>${r.estres
+           .map(
+             (e) => `<tr>
+               <td>${e.subida === 0 ? "Actual" : `+${e.subida} pt`}</td>
+               <td>${fmtPct(e.tipoPct)}</td>
+               <td>${fmtEUR(e.cuota)}</td>
+               <td>${fmtEUR(e.cuotaTotal)}</td>
+               ${r.ingresosMensuales > 0 ? `<td class="${e.esfuerzoTotalPct > REF_ESFUERZO_PCT ? "neg" : ""}">${fmtPct(e.esfuerzoTotalPct)}</td>` : ""}
+             </tr>`
+           )
+           .join("")}</tbody>
+       </table></div>
+       <p class="muted">Escenario pesimista a propósito, no una previsión: el Euríbor sube de golpe ${r.tipoHipoteca === "mixta" ? "al acabar el periodo fijo" : "desde el primer día"} y se queda ahí todo el préstamo. En la realidad la cuota se revisa cada 6-12 meses sobre el capital ya amortizado, así que el impacto real suele ser algo menor.</p>`
+    : "";
+
+  const colchonHtml =
+    r.gastosMensualesHogar > 0
+      ? `<div class="kpi-row"><span>Colchón de liquidez hoy</span><span>${fmtMeses(r.colchonHoyMeses)}</span></div>
+         <div class="kpi-row"><span><strong>Colchón de liquidez tras la operación</strong></span><span class="${r.colchonTrasMeses < REF_COLCHON_MIN_MESES ? "neg" : ""}"><strong>${fmtMeses(r.colchonTrasMeses)}</strong></span></div>
+         <p class="muted">Meses que aguantaría tu liquidez (cuentas, ahorro y depósitos) cubriendo tus gastos habituales (${fmtEUR(r.gastosMensualesHogar)}/mes) más todas las cuotas de hipoteca. Suele recomendarse tener entre ${REF_COLCHON_MIN_MESES} y 6 meses.</p>`
+      : `<p class="muted">Para ver cuántos meses de colchón te quedarían, indica tus gastos mensuales habituales en Ajustes → Simulador — Compra de propiedad.</p>`;
+
   return `
     <div class="kpi-row"><span>Impuestos de la operación</span><span>${fmtEUR(r.impuestos)}</span></div>
     <div class="kpi-row"><span>Otros gastos (notaría, registro, gestoría)</span><span>${fmtEUR(r.otrosGastos)}</span></div>
@@ -44,10 +83,14 @@ function resultadoCompraHtml(r) {
     <div class="kpi-row"><span>Financiación sobre el precio de compra</span><span class="${r.financiacionSobrePrecioPct > REF_FINANCIACION_PCT ? "neg" : ""}">${fmtPct(r.financiacionSobrePrecioPct)}</span></div>
     <div class="kpi-row"><span>Financiación sobre el coste total (con impuestos y gastos)</span><span>${fmtPct(r.financiacionSobreCostePct)}</span></div>
     <p class="muted">Referencia habitual: los bancos financian hasta ~${REF_FINANCIACION_PCT}% del menor entre precio y tasación en vivienda habitual, y suelen bajar a ~60-70% en segunda residencia o inversión.</p>
-    <div class="kpi-row"><span>Cuota mensual de esta hipoteca</span><span>${fmtEUR(r.cuotaMensual)}</span></div>
-    <div class="kpi-row"><span>Total intereses a lo largo del préstamo</span><span>${fmtEUR(r.totalIntereses)}</span></div>
+    ${tipoHipotecaHtml}
+    <div class="kpi-row"><span>${r.tipoHipoteca === "mixta" ? "Cuota mensual durante el periodo fijo" : "Cuota mensual de esta hipoteca"}</span><span>${fmtEUR(r.cuotaMensual)}</span></div>
+    ${r.tipoHipoteca === "mixta" ? `<div class="kpi-row"><span>Cuota mensual tras los ${r.aniosFijos} años fijos (con el Euríbor actual)</span><span>${fmtEUR(r.cuotaTrasFijo)}</span></div>` : ""}
+    <div class="kpi-row"><span>Total intereses a lo largo del préstamo${r.tipoHipoteca === "fija" ? "" : " (suponiendo Euríbor constante)"}</span><span>${fmtEUR(r.totalIntereses)}</span></div>
     <div class="kpi-row"><span>Cuota mensual total (con hipotecas actuales)</span><span>${fmtEUR(r.cuotaMensualTotalDespues)}</span></div>
     ${esfuerzoHtml}
+    ${estresHtml}
+    ${colchonHtml}
     <div class="kpi-row"><span>Patrimonio neto actual</span><span>${fmtEUR(r.patrimonioNetoActual)}</span></div>
     <div class="kpi-row"><span><strong>Impacto inmediato en patrimonio neto</strong></span><span class="neg"><strong>${fmtEUR(r.impactoPatrimonioNeto)}</strong></span></div>
     <p class="muted">El precio pagado se convierte en un activo del mismo valor, así que el patrimonio neto solo baja por los costes de la operación (impuestos + gastos) — el precio en sí no te empobrece, solo cambia de forma.</p>
@@ -91,6 +134,7 @@ export function renderSimuladores(container) {
   const meta = data.meta;
   const patrimonioInicial = financialBreakdownBySubclass().total;
   const alquiler = alquilerAnualTotal();
+  const tipoHipotecaGuardado = meta.compraPropiedadTipoHipoteca || "fija";
 
   container.innerHTML = `
     <div class="section-head">
@@ -123,7 +167,7 @@ export function renderSimuladores(container) {
 
     <section class="card">
       <h3>¿Podemos comprar otra propiedad?</h3>
-      <p class="muted">Simulación de una compra financiada con hipoteca a tipo fijo (cuota constante, sistema francés). Impuestos y otros gastos configurables en Ajustes.</p>
+      <p class="muted">Simulación de una compra financiada con hipoteca fija, variable o mixta (cuota constante, sistema francés). Impuestos, gastos, ingresos y gastos del hogar configurables en Ajustes.</p>
       <form id="form-compra" class="stacked-form">
         <label>Precio de la propiedad (€)
           <input name="precio" type="number" step="any" min="0" value="${meta.compraPropiedadPrecio ?? ""}" required />
@@ -137,8 +181,24 @@ export function renderSimuladores(container) {
         <label>Importe a hipotecar (€)
           <input name="importeHipoteca" type="number" step="any" min="0" value="${meta.compraPropiedadImporteHipoteca ?? ""}" required />
         </label>
-        <label>Tipo de interés fijo anual (%)
+        <label>Tipo de hipoteca
+          <select name="tipoHipoteca" id="tipo-hipoteca">
+            <option value="fija" ${tipoHipotecaGuardado === "fija" ? "selected" : ""}>Fija</option>
+            <option value="variable" ${tipoHipotecaGuardado === "variable" ? "selected" : ""}>Variable (Euríbor + diferencial)</option>
+            <option value="mixta" ${tipoHipotecaGuardado === "mixta" ? "selected" : ""}>Mixta (fija los primeros años, luego variable)</option>
+          </select>
+        </label>
+        <label id="grupo-tipo-fijo"><span id="label-tipo-fijo">Tipo de interés fijo anual (%)</span>
           <input name="tipoInteresPct" type="number" step="any" min="0" value="${meta.compraPropiedadTipoInteresPct ?? ""}" required />
+        </label>
+        <label id="grupo-anios-fijos">Años a tipo fijo
+          <input name="aniosFijos" type="number" step="any" min="0" value="${meta.compraPropiedadAniosFijos ?? ""}" required />
+        </label>
+        <label id="grupo-euribor">Euríbor actual (%)
+          <input name="euriborPct" type="number" step="any" value="${meta.compraPropiedadEuriborPct ?? ""}" required />
+        </label>
+        <label id="grupo-diferencial">Diferencial sobre el Euríbor (%)
+          <input name="diferencialPct" type="number" step="any" value="${meta.compraPropiedadDiferencialPct ?? ""}" required />
         </label>
         <label>Plazo (años)
           <input name="plazoAnios" type="number" step="1" min="1" value="${meta.compraPropiedadPlazoAnios ?? ""}" required />
@@ -186,13 +246,41 @@ export function renderSimuladores(container) {
   const formCompra = container.querySelector("#form-compra");
   const resultadoCompraDiv = container.querySelector("#resultado-compra");
 
+  // Muestra solo los campos que aplican al tipo de hipoteca elegido; los
+  // ocultos se desactivan para que no bloqueen el envío del formulario.
+  const tipoHipotecaSelect = formCompra.querySelector("#tipo-hipoteca");
+  function refrescarCamposHipoteca() {
+    const tipo = tipoHipotecaSelect.value;
+    const visibles = {
+      "grupo-tipo-fijo": tipo === "fija" || tipo === "mixta",
+      "grupo-anios-fijos": tipo === "mixta",
+      "grupo-euribor": tipo === "variable" || tipo === "mixta",
+      "grupo-diferencial": tipo === "variable" || tipo === "mixta",
+    };
+    for (const [id, visible] of Object.entries(visibles)) {
+      const grupo = formCompra.querySelector(`#${id}`);
+      grupo.style.display = visible ? "" : "none";
+      grupo.querySelector("input").disabled = !visible;
+    }
+    formCompra.querySelector("#label-tipo-fijo").textContent = tipo === "mixta" ? "Tipo fijo del periodo inicial (%)" : "Tipo de interés fijo anual (%)";
+  }
+  tipoHipotecaSelect.addEventListener("change", refrescarCamposHipoteca);
+  refrescarCamposHipoteca();
+
   function calcularCompraYMostrar() {
     const fd = new FormData(formCompra);
+    // Un campo oculto (desactivado) no viaja en el formulario: conserva el último valor guardado.
+    const guardados = store.get().meta;
+    const numero = (nombre, guardado) => (fd.get(nombre) !== null && fd.get(nombre) !== "" ? Number(fd.get(nombre)) : guardado ?? null);
     const params = {
       precio: Number(fd.get("precio")),
       tipoVivienda: fd.get("tipoVivienda"),
       importeHipoteca: Number(fd.get("importeHipoteca")),
-      tipoInteresPct: Number(fd.get("tipoInteresPct")),
+      tipoHipoteca: fd.get("tipoHipoteca"),
+      tipoInteresPct: numero("tipoInteresPct", guardados.compraPropiedadTipoInteresPct),
+      euriborPct: numero("euriborPct", guardados.compraPropiedadEuriborPct),
+      diferencialPct: numero("diferencialPct", guardados.compraPropiedadDiferencialPct),
+      aniosFijos: numero("aniosFijos", guardados.compraPropiedadAniosFijos),
       plazoAnios: Number(fd.get("plazoAnios")),
       valorVentaViviendaHabitual: fd.get("valorVentaViviendaHabitual") ? Number(fd.get("valorVentaViviendaHabitual")) : 0,
     };
@@ -200,7 +288,11 @@ export function renderSimuladores(container) {
       compraPropiedadPrecio: params.precio,
       compraPropiedadTipoVivienda: params.tipoVivienda,
       compraPropiedadImporteHipoteca: params.importeHipoteca,
+      compraPropiedadTipoHipoteca: params.tipoHipoteca,
       compraPropiedadTipoInteresPct: params.tipoInteresPct,
+      compraPropiedadEuriborPct: params.euriborPct,
+      compraPropiedadDiferencialPct: params.diferencialPct,
+      compraPropiedadAniosFijos: params.aniosFijos,
       compraPropiedadPlazoAnios: params.plazoAnios,
       compraPropiedadValorVentaViviendaHabitual: params.valorVentaViviendaHabitual,
     });
