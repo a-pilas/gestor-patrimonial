@@ -17,6 +17,33 @@ function fmtEUR(n) {
   return Number(n).toLocaleString("es-ES", { style: "currency", currency: "EUR" });
 }
 
+// Exporta el Resumen por activo tal cual se está viendo (respeta el filtro
+// de entidad y si se muestran o no las posiciones a cero), con una columna
+// "Fecha actualización" (la de la última posición de cada activo) que no se
+// enseña en la tabla en pantalla. CSV con ; y coma decimal para que Excel en
+// español lo abra bien directamente, sin depender de ninguna librería externa.
+function exportarResumenExcel(rows, entityName) {
+  const header = ["Activo", "Entidad", "Aportado", "Valor actual", "Plusvalía", "Fecha actualización"];
+  const numero = (n) => (n != null ? n.toFixed(2).replace(".", ",") : "");
+  const celda = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const filas = rows.map((r) => [
+    r.asset.name,
+    entityName(r.asset.entityId),
+    numero(r.aportado),
+    numero(r.valorActual),
+    numero(r.plusvalia),
+    r.fechaActualizacion || "",
+  ]);
+  const csv = [header, ...filas].map((fila) => fila.map(celda).join(";")).join("\r\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `resumen-activos-${todayIso()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function renderPositions(container) {
   const data = store.get();
 
@@ -43,7 +70,10 @@ export function renderPositions(container) {
       const valorActual = latest ? valueOfPosition(latest) : null;
       const aportado = aportadoNetoPorActivo(a.id);
       const plusvalia = valorActual != null ? valorActual - aportado : null;
-      return { asset: a, valorActual, aportado, plusvalia };
+      // No se muestra en la tabla en pantalla, pero sí se incluye en la
+      // exportación a Excel (columna "Fecha actualización").
+      const fechaActualizacion = latest ? latest.date : null;
+      return { asset: a, valorActual, aportado, plusvalia, fechaActualizacion };
     })
     .sort((a, b) => {
       const entityCmp = entityName(a.asset.entityId).localeCompare(entityName(b.asset.entityId), "es");
@@ -76,6 +106,8 @@ export function renderPositions(container) {
     <section class="card">
       <div class="section-head">
         <h3>Resumen por activo</h3>
+        <div class="btn-row">
+        <button type="button" id="btn-export-resumen" class="link-btn">⬇ Exportar a Excel</button>
         <select id="resumen-entity-filter">
           <option value="todas" ${resumenEntityFilter === "todas" ? "selected" : ""}>Todas las entidades</option>
           ${data.entities
@@ -87,6 +119,7 @@ export function renderPositions(container) {
               : ""
           }
         </select>
+        </div>
       </div>
       <div class="table-wrap">
         <table class="table">
@@ -309,6 +342,10 @@ export function renderPositions(container) {
   container.querySelector("#resumen-entity-filter").addEventListener("change", (ev) => {
     resumenEntityFilter = ev.target.value;
     renderPositions(container);
+  });
+
+  container.querySelector("#btn-export-resumen").addEventListener("click", () => {
+    exportarResumenExcel(resumenRows, entityName);
   });
 
   container.querySelector("#btn-toggle-zero")?.addEventListener("click", () => {
