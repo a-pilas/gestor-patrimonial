@@ -9,6 +9,7 @@ import {
   detalleTwrInversionFinanciera,
   detalleTwrInmobiliario,
   riskScores,
+  asignacionRvRfInversionFinanciera,
   fechaUltimaActualizacion,
   assetsWithoutPosition,
   totalDeudaPendiente,
@@ -569,6 +570,34 @@ function riskBar(label, value, max = RISK_SCALE_MAX) {
 // Barra apilada de 3 segmentos: qué % de TODO el patrimonio (financiero +
 // inmobiliario) cae en cada banda de riesgo, más granular que el promedio
 // RF/RV/Combinado de la tarjeta de al lado.
+// RV / RF sobre la inversión financiera SOLA (sin liquidez ni inmuebles),
+// repartiendo los Mixtos según su "% en RV" de Activos.
+function rvRfCard() {
+  const a = asignacionRvRfInversionFinanciera();
+  const filas = [
+    { color: ASSET_CLASSES.renta_variable.color, label: "Renta variable", value: a.rv, siempre: true },
+    { color: ASSET_CLASSES.renta_fija.color, label: "Renta fija", value: a.rf, siempre: true },
+    { color: ASSET_CLASSES.mixto.color, label: "Mixto sin reparto RV/RF", value: a.mixtoSinReparto },
+    { color: ASSET_CLASSES.liquidez.color, label: "Otros (monetario en clase Liquidez)", value: a.otros },
+  ]
+    .filter((f) => f.siempre || f.value > 0)
+    .map((f) => ({ ...f, pct: a.total ? (f.value / a.total) * 100 : 0 }));
+  return `
+    <section class="card">
+      <h3>Renta variable / Renta fija</h3>
+      <p class="muted">Sobre tu inversión financiera, sin cuentas, ahorro ni depósitos y sin inmuebles. Los fondos Mixtos se reparten según su "% en RV" de Activos.</p>
+      <div class="stackbar-total">${fmtEUR(a.total)}</div>
+      <div class="stackbar" role="img" aria-label="${filas.map((f) => `${f.label} ${fmtPct1(f.pct)}`).join(", ")}">
+        ${filas.map((f) => `<div class="stackbar-seg" style="width:${f.pct}%; background:${f.color}"></div>`).join("")}
+      </div>
+      <div class="legend">
+        ${filas.map((f) => legendRow(f.color, f.label, f.value, f.pct)).join("")}
+      </div>
+      ${a.mixtoSinReparto > 0 ? `<p class="muted">Hay ${fmtEUR(a.mixtoSinReparto)} en fondos Mixtos sin "% en RV" informado: indícalo en Activos para repartirlos entre RV y RF.</p>` : ""}
+    </section>
+  `;
+}
+
 function riskBandsCard() {
   const { bands, total } = bandasDeRiesgo();
   const withPct = bands.map((b) => ({ ...b, pct: total ? (b.value / total) * 100 : 0 }));
@@ -691,6 +720,8 @@ export function renderDashboard(container) {
       </section>
 
       ${riskBandsCard()}
+
+      ${rvRfCard()}
     </div>
 
     ${evolutionChartCard()}

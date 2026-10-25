@@ -1196,3 +1196,32 @@ export function costeAnualEstimado() {
   detalle.sort((a, b) => b.costeEUR - a.costeEUR);
   return { totalEUR, valorConDatos, pctPonderado: valorConDatos ? (totalEUR / valorConDatos) * 100 : 0, detalle };
 }
+
+// Reparto Renta variable / Renta fija de la INVERSIÓN financiera (sin
+// liquidez operativa ni inmuebles — mismo criterio que esInversionFinanciera).
+// Los Mixtos con "% en RV" informado se reparten entre RV y RF; los que no
+// lo tienen quedan aparte como "mixtoSinReparto" para no inventar un reparto.
+// "otros" recoge lo financiero que no es RV/RF/Mixto (p.ej. un Monetario
+// dado de alta en la clase Liquidez).
+export function asignacionRvRfInversionFinanciera() {
+  let rv = 0;
+  let rf = 0;
+  let mixtoSinReparto = 0;
+  let otros = 0;
+  for (const p of latestPositionsByAssetEntity()) {
+    const asset = assetById(p.assetId);
+    if (!asset || !esInversionFinanciera(asset)) continue;
+    const value = valueOfPosition(p);
+    if (asset.class === "renta_variable") rv += value;
+    else if (asset.class === "renta_fija") rf += value;
+    else if (asset.class === "mixto") {
+      if (asset.mixRvPct != null) {
+        rv += value * (asset.mixRvPct / 100);
+        rf += value * (1 - asset.mixRvPct / 100);
+      } else {
+        mixtoSinReparto += value;
+      }
+    } else otros += value;
+  }
+  return { rv, rf, mixtoSinReparto, otros, total: rv + rf + mixtoSinReparto + otros };
+}
