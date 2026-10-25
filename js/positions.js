@@ -7,6 +7,14 @@ let bulkMode = false;
 let showZeroPositions = false;
 let historyYearFilter = "todos";
 let resumenEntityFilter = "todas";
+// Tipos de inversión seleccionados en el Resumen (vacío = todos). Se usa la
+// subclase del activo (Fondo, Plan de pensiones, Cuenta corriente...), salvo
+// el inmobiliario, que va agrupado en un único tipo.
+const resumenTypeFilter = new Set();
+
+function tipoInversion(asset) {
+  return asset.class === "inmobiliario" ? "Inmobiliario" : asset.subclass || "Otros";
+}
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -17,8 +25,8 @@ function fmtEUR(n) {
   return Number(n).toLocaleString("es-ES", { style: "currency", currency: "EUR" });
 }
 
-// Exporta el Resumen por activo tal cual se está viendo (respeta el filtro
-// de entidad y si se muestran o no las posiciones a cero), con una columna
+// Exporta el Resumen por activo tal cual se está viendo (respeta los filtros
+// de entidad y de tipo, y si se muestran o no las posiciones a cero), con una columna
 // "Fecha actualización" (la de la última posición de cada activo) que no se
 // enseña en la tabla en pantalla. CSV con ; y coma decimal para que Excel en
 // español lo abra bien directamente, sin depender de ninguna librería externa.
@@ -85,10 +93,24 @@ export function renderPositions(container) {
   // todo (ver invariante Posiciones vs. Movimientos): se sigue conservando
   // el dato, pero por defecto se oculta de "lo que tengo en cartera" para
   // no distorsionar la vista — un enlace lo despliega ocasionalmente.
-  const resumenRowsZero = resumenRowsAll.filter((r) => r.valorActual != null && r.valorActual <= 0);
-  const resumenRowsVisibles = showZeroPositions ? resumenRowsAll : resumenRowsAll.filter((r) => r.valorActual == null || r.valorActual > 0);
-  const resumenRows =
-    resumenEntityFilter === "todas" ? resumenRowsVisibles : resumenRowsVisibles.filter((r) => (r.asset.entityId || "__sin_entidad__") === resumenEntityFilter);
+  const tiposDisponibles = [...new Set(data.assets.map(tipoInversion))].sort((a, b) => a.localeCompare(b, "es"));
+  // Si un tipo seleccionado ya no existe en ningún activo, se ignora.
+  for (const t of [...resumenTypeFilter]) if (!tiposDisponibles.includes(t)) resumenTypeFilter.delete(t);
+
+  // Segmento = filtro de entidad + filtro de tipo (combinados); sobre él se
+  // aplica luego lo de mostrar u ocultar las posiciones a cero.
+  const resumenSegmento = resumenRowsAll.filter(
+    (r) =>
+      (resumenEntityFilter === "todas" || (r.asset.entityId || "__sin_entidad__") === resumenEntityFilter) &&
+      (!resumenTypeFilter.size || resumenTypeFilter.has(tipoInversion(r.asset)))
+  );
+  const resumenRowsZero = resumenSegmento.filter((r) => r.valorActual != null && r.valorActual <= 0);
+  const resumenRows = showZeroPositions ? resumenSegmento : resumenSegmento.filter((r) => r.valorActual == null || r.valorActual > 0);
+  const hayFiltros = resumenEntityFilter !== "todas" || resumenTypeFilter.size > 0;
+  const totalSegmento = resumenRows.reduce(
+    (t, r) => ({ aportado: t.aportado + (r.aportado || 0), valor: t.valor + (r.valorActual || 0), plusvalia: t.plusvalia + (r.plusvalia || 0) }),
+    { aportado: 0, valor: 0, plusvalia: 0 }
+  );
 
   const historyYears = [...new Set(data.positions.map((p) => p.date.slice(0, 4)))].sort((a, b) => b.localeCompare(a));
   const filteredSorted = historyYearFilter === "todos" ? sorted : sorted.filter((p) => p.date.slice(0, 4) === historyYearFilter);
@@ -121,6 +143,12 @@ export function renderPositions(container) {
         </select>
         </div>
       </div>
+      <div class="filter-chips" role="group" aria-label="Filtrar por tipo de inversión">
+        ${tiposDisponibles
+          .map((t) => `<button type="button" class="chip-toggle${resumenTypeFilter.has(t) ? " active" : ""}" data-tipo="${t}" aria-pressed="${resumenTypeFilter.has(t)}">${t}</button>`)
+          .join("")}
+        ${resumenTypeFilter.size ? `<button type="button" id="btn-clear-tipos" class="link-btn">Quitar filtro de tipo</button>` : ""}
+      </div>
       <div class="table-wrap">
         <table class="table">
           <thead><tr><th>Activo</th><th>Entidad</th><th>Aportado</th><th>Valor actual</th><th>Plusvalía</th></tr></thead>
@@ -137,9 +165,19 @@ export function renderPositions(container) {
                   </tr>`
                 )
                 .join("") ||
-              `<tr><td colspan="5" class="muted">${resumenEntityFilter === "todas" ? "Sin activos todavía" : "Sin activos en esta entidad"}</td></tr>`
+              `<tr><td colspan="5" class="muted">${hayFiltros ? "Ningún activo coincide con los filtros" : "Sin activos todavía"}</td></tr>`
             }
           </tbody>
+          ${
+            hayFiltros && resumenRows.length
+              ? `<tfoot><tr>
+                  <td colspan="2"><strong>Total del segmento (${resumenRows.length})</strong></td>
+                  <td><strong>${fmtEUR(totalSegmento.aportado)}</strong></td>
+                  <td><strong>${fmtEUR(totalSegmento.valor)}</strong></td>
+                  <td class="${totalSegmento.plusvalia >= 0 ? "pos" : "neg"}"><strong>${fmtEUR(totalSegmento.plusvalia)}</strong></td>
+                </tr></tfoot>`
+              : ""
+          }
         </table>
       </div>
       ${
@@ -341,6 +379,20 @@ export function renderPositions(container) {
 
   container.querySelector("#resumen-entity-filter").addEventListener("change", (ev) => {
     resumenEntityFilter = ev.target.value;
+    renderPositions(container);
+  });
+
+  container.querySelectorAll(".chip-toggle").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const t = btn.dataset.tipo;
+      if (resumenTypeFilter.has(t)) resumenTypeFilter.delete(t);
+      else resumenTypeFilter.add(t);
+      renderPositions(container);
+    })
+  );
+
+  container.querySelector("#btn-clear-tipos")?.addEventListener("click", () => {
+    resumenTypeFilter.clear();
     renderPositions(container);
   });
 

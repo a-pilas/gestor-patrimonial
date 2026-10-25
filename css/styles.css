@@ -337,3 +337,16 @@ dialog.app-modal::backdrop { background: rgba(0, 0, 0, 0.55); }
   .table, .table-history { font-size: 0.82rem; }
   .table th, .table td, .table-history tbody td { padding: 8px 6px; }
 }
+
+.filter-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 12px; }
+.chip-toggle {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.chip-toggle:hover { border-color: var(--brand-light); color: var(--text); }
+.chip-toggle.active { background: var(--brand); border-color: var(--brand-light); color: var(--text); }
