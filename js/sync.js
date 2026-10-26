@@ -111,8 +111,10 @@ function programarEmpuje() {
   pushTimer = setTimeout(empujarAhora, PUSH_DEBOUNCE_MS);
 }
 
+// Devuelve true solo si lo subió de verdad a Drive.
 export async function empujarAhora() {
-  if (!conectado || sincronizando) return;
+  if (!conectado || sincronizando) return false;
+  clearTimeout(pushTimer);
   sincronizando = true;
   notificar({ tipo: "sincronizando" });
   try {
@@ -124,14 +126,16 @@ export async function empujarAhora() {
       // decida qué versión conservar.
       ultimoConflicto = { remoteModifiedTime: remoto.modifiedTime };
       notificar({ tipo: "conflicto" });
-      return;
+      return false;
     }
     const resultado = await guardarEnDrive(store.exportJson());
     guardarEstadoSync({ lastKnownModifiedTime: resultado.modifiedTime });
     ultimoConflicto = null;
     notificar({ tipo: "sincronizado", cuando: new Date(), origen: "push" });
+    return true;
   } catch (e) {
     notificar({ tipo: "error", mensaje: e.message });
+    return false;
   } finally {
     sincronizando = false;
   }

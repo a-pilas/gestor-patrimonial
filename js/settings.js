@@ -204,11 +204,20 @@ export function renderSettings(container) {
     const text = await file.text();
     try {
       store.importJson(text);
-      alert("Datos importados correctamente.");
-      location.reload();
     } catch (e) {
       alert("El fichero no es un JSON válido de esta aplicación.");
+      return;
     }
+    // Con Drive conectado hay que subir lo importado ANTES de recargar: el
+    // guardado automático espera unos segundos y, si se recarga antes, al
+    // arrancar se bajaría de Drive la versión anterior y pisaría lo importado.
+    if (estaConectado() && !(await empujarAhora())) {
+      alert("Datos importados en este dispositivo, pero NO se han subido a Drive (otro dispositivo guardó cambios antes, o falló la conexión). No recargues todavía: revisa Ajustes → Drive y elige qué versión conservar, o vuelve a intentarlo.");
+      renderSettings(container);
+      return;
+    }
+    alert("Datos importados correctamente.");
+    location.reload();
   });
 
   const driveStatus = container.querySelector("#drive-status");
