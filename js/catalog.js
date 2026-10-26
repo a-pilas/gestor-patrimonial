@@ -8,7 +8,8 @@ import {
   LIQUIDEZ_OPERATIVA_SUBCLASSES,
   COST_FIELDS,
 } from "./model.js";
-import { store } from "./store.js";
+import { store, latestPositionsByAssetEntity } from "./store.js";
+import { valueOfPosition } from "./metrics.js";
 
 // Mismo criterio que esInversionFinanciera() en metrics.js (TWR, look-through
 // del X-Ray...), pero sobre los valores sueltos del formulario en vez de un
@@ -23,6 +24,7 @@ function fmtEUR(n) {
 }
 
 let editingAssetId = null;
+let showHistoricAssets = false;
 
 export function renderCatalog(container) {
   const data = store.get();
@@ -30,11 +32,26 @@ export function renderCatalog(container) {
   const editing = editingAssetId ? data.assets.find((a) => a.id === editingAssetId) : null;
 
   const sortedEntities = [...data.entities].sort((a, b) => a.name.localeCompare(b.name, "es"));
-  const sortedAssets = [...data.assets].sort((a, b) => {
+  const allSortedAssets = [...data.assets].sort((a, b) => {
     const entityCmp = entityName(a.entityId).localeCompare(entityName(b.entityId), "es");
     if (entityCmp !== 0) return entityCmp;
     return a.name.localeCompare(b.name, "es");
   });
+
+  // Un activo "histórico" es el que ya no tienes: su última posición está a
+  // 0€ (traspasado o vendido del todo — el mismo criterio que en Posiciones).
+  // Un activo sin ninguna posición todavía NO es histórico, sino pendiente
+  // de valorar, así que sigue visible. Se oculta por defecto, sin borrarlo.
+  const posicionesActuales = latestPositionsByAssetEntity();
+  const historicIds = new Set(
+    data.assets
+      .filter((a) => {
+        const posiciones = posicionesActuales.filter((p) => p.assetId === a.id);
+        return posiciones.length > 0 && posiciones.every((p) => valueOfPosition(p) <= 0);
+      })
+      .map((a) => a.id)
+  );
+  const sortedAssets = showHistoricAssets ? allSortedAssets : allSortedAssets.filter((a) => !historicIds.has(a.id));
 
   container.innerHTML = `
     <section class="card">
@@ -123,8 +140,8 @@ export function renderCatalog(container) {
           <tbody>
             ${sortedAssets
               .map(
-                  (a) => `<tr>
-                    <td>${a.name}</td>
+                  (a) => `<tr${historicIds.has(a.id) ? ' class="row-zero"' : ""}>
+                    <td>${a.name}${historicIds.has(a.id) ? ' <span class="muted">(histórico)</span>' : ""}</td>
                     <td>${
                       a.entityId
                         ? entityName(a.entityId)
@@ -148,10 +165,15 @@ export function renderCatalog(container) {
                     </td>
                   </tr>`
               )
-              .join("") || '<tr><td colspan="7" class="muted">Sin activos todavía</td></tr>'}
+              .join("") || '<tr><td colspan="7" class="muted">${data.assets.length ? "Ningún activo en cartera actualmente" : "Sin activos todavía"}</td></tr>'}
           </tbody>
         </table>
       </div>
+      ${
+        historicIds.size
+          ? `<button type="button" id="btn-toggle-historic" class="link-btn">${showHistoricAssets ? "Ocultar activos históricos" : `Ver también activos históricos (${historicIds.size})`}</button>`
+          : ""
+      }
     </section>
   `;
 
@@ -286,6 +308,11 @@ export function renderCatalog(container) {
     } else {
       store.addAsset(payload);
     }
+    renderCatalog(container);
+  });
+
+  container.querySelector("#btn-toggle-historic")?.addEventListener("click", () => {
+    showHistoricAssets = !showHistoricAssets;
     renderCatalog(container);
   });
 
