@@ -133,9 +133,9 @@ function valorFiltradoHasta(cutoff, assetFilter) {
 // a los movimientos/adquisiciones de un bloque concreto (assetFilter) — los
 // movimientos sin activo asociado (aportación/retirada de "efectivo
 // genérico") no se pueden atribuir a un bloque, así que quedan fuera.
-function flujoNetoEntreFiltrado(desde, hasta, assetFilter) {
+function flujosDatadosEntreFiltrado(desde, hasta, assetFilter) {
   const data = store.get();
-  let flujo = 0;
+  const flujos = [];
   for (const m of data.movements) {
     if (m.date < desde || m.date > hasta) continue;
     // Traspaso con activo de origen conocido: entra en el bloque del destino
@@ -145,23 +145,29 @@ function flujoNetoEntreFiltrado(desde, hasta, assetFilter) {
       const destino = m.assetId ? assetById(m.assetId) : null;
       const origen = assetById(m.fromAssetId);
       const importe = Number(m.amount) || 0;
-      if (destino && assetFilter(destino)) flujo += importe;
-      if (origen && assetFilter(origen)) flujo -= importe;
+      if (destino && assetFilter(destino)) flujos.push({ date: m.date, importe });
+      if (origen && assetFilter(origen)) flujos.push({ date: m.date, importe: -importe });
       continue;
     }
     if (!m.assetId) continue;
     const asset = assetById(m.assetId);
     if (!asset || !assetFilter(asset)) continue;
-    if (m.type === "aportacion" || m.type === "traspaso" || m.type === "compra") flujo += Number(m.amount) || 0;
-    if (m.type === "retirada" || m.type === "venta") flujo -= Number(m.amount) || 0;
+    const importe = Number(m.amount) || 0;
+    if (m.type === "aportacion" || m.type === "traspaso" || m.type === "compra") flujos.push({ date: m.date, importe });
+    if (m.type === "retirada" || m.type === "venta") flujos.push({ date: m.date, importe: -importe });
   }
   for (const a of data.assets) {
     if (!assetFilter(a)) continue;
     if (a.acquisitionDate && a.acquisitionDate >= desde && a.acquisitionDate <= hasta) {
-      flujo += purchasePriceAsAportado(a); // 0 si no es un inmueble físico
+      const importe = purchasePriceAsAportado(a); // 0 si no es un inmueble físico
+      if (importe) flujos.push({ date: a.acquisitionDate, importe });
     }
   }
-  return flujo;
+  return flujos;
+}
+
+function flujoNetoEntreFiltrado(desde, hasta, assetFilter) {
+  return flujosDatadosEntreFiltrado(desde, hasta, assetFilter).reduce((suma, f) => suma + f.importe, 0);
 }
 
 // Rentabilidad YTD por TWR (Time-Weighted Return) real de un bloque
@@ -253,6 +259,37 @@ function revalorizacionYtdEur(assetFilter) {
   return { valorInicio, valorActual, flujo, ganancia: valorActual - valorInicio - flujo };
 }
 
+// Rentabilidad YTD por Dietz modificado de TODO el año (un único periodo):
+// ganancia en euros ÷ capital medio invertido, donde el capital medio es el
+// valor a 31/12 más cada flujo del año ponderado por los días que ha estado
+// dentro. Solo usa tres datos fiables — valor a 31/12, valor actual y las
+// fechas de los movimientos — y por eso no le afectan las posiciones
+// intermedias que falten, estén a medias o lleven un desfase de días. El
+// encadenado por sub-periodos (calcularTwrAñoDetallado) es más preciso solo
+// si hay una foto completa de la cartera en cada corte, y con actualizaciones
+// parciales fabrica pérdidas y ganancias ficticias (-1,5% con +97.000 € reales).
+function rentabilidadAnualDietz(assetFilter) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const hoy = now.toISOString().slice(0, 10);
+  const valorInicio = valorFiltradoHasta(`${year - 1}-12-31`, assetFilter);
+  if (!valorInicio) return null; // sin histórico suficiente
+  const valorActual = valorFiltradoHasta(hoy, assetFilter);
+  const flujos = flujosDatadosEntreFiltrado(`${year}-01-01`, hoy, assetFilter);
+  const diaMs = 86400000;
+  const inicio = Date.parse(`${year - 1}-12-31`);
+  const duracion = (Date.parse(hoy) - inicio) / diaMs;
+  let flujoTotal = 0;
+  let capital = valorInicio;
+  for (const f of flujos) {
+    flujoTotal += f.importe;
+    const diasDentro = (Date.parse(hoy) - Date.parse(f.date)) / diaMs;
+    capital += f.importe * (duracion > 0 ? diasDentro / duracion : 0);
+  }
+  if (capital <= 0) return null;
+  return ((valorActual - valorInicio - flujoTotal) / capital) * 100;
+}
+
 export function revalorizacionYtdInversionFinanciera() {
   return revalorizacionYtdEur(esInversionFinanciera);
 }
@@ -262,11 +299,11 @@ export function revalorizacionYtdInmobiliario() {
 }
 
 export function rentabilidadYtdInversionFinancieraPct() {
-  return calcularTwrAñoDetallado(esInversionFinanciera).pct;
+  return rentabilidadAnualDietz(esInversionFinanciera);
 }
 
 export function rentabilidadYtdInmobiliarioPct() {
-  return calcularTwrAñoDetallado(esInmobiliarioAsset).pct;
+  return rentabilidadAnualDietz(esInmobiliarioAsset);
 }
 
 export function detalleTwrInversionFinanciera() {

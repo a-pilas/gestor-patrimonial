@@ -402,7 +402,7 @@ function twrDetailTable(label, detalle) {
 function twrDetailSection() {
   return `
     <div class="twr-detail">
-      <p class="muted">Filas en rojo: sub-periodos con una rentabilidad por encima del ±50%, casi siempre señal de un dato mal introducido (una Compra/Aportación con el importe equivocado, una Posición que en realidad era una Venta, etc.) en vez de una rentabilidad real de mercado.</p>
+      <p class="muted">Solo diagnóstico: este desglose encadena un periodo por cada fecha con posiciones y ya no determina el porcentaje de arriba. Si el valor baja o sube de golpe en una fecha (por ejemplo, un fondo traspasado que se pone a 0 un día y el destino aparece semanas después), saldrán rentabilidades ficticias aquí. Filas en rojo: sub-periodos con una rentabilidad por encima del ±50%, casi siempre señal de un dato mal introducido (una Compra/Aportación con el importe equivocado, una Posición que en realidad era una Venta, etc.) en vez de una rentabilidad real de mercado.</p>
       ${twrDetailTable("Inversión financiera", detalleTwrInversionFinanciera())}
       ${twrDetailTable("Inmobiliario", detalleTwrInmobiliario())}
     </div>
@@ -700,7 +700,7 @@ export function renderDashboard(container) {
 
       <section class="card card-ytd">
         <h3>Rentabilidad YTD — Inversión financiera</h3>
-        <p class="muted">TWR (Time-Weighted Return): encadena un periodo por cada actualización de posiciones, para que las aportaciones no distorsionen la rentabilidad de mercado. Excluye cuentas corrientes e inmobiliario — la liquidez operativa no tiene "rentabilidad" y mezclarla distorsiona el cálculo.</p>
+        <p class="muted">Ganancia del año (valor actual − valor a 31/12 − aportaciones netas) dividida entre el capital medio invertido, contando cada aportación solo por los días que ha estado dentro (Dietz modificado). Así las aportaciones no inflan la rentabilidad y las actualizaciones de posiciones a medias no la distorsionan. Excluye cuentas corrientes e inmobiliario — la liquidez operativa no tiene "rentabilidad" y mezclarla distorsiona el cálculo.</p>
         <div class="ytd-compare">
           <div class="ytd-box">
             <span class="ytd-label">Inversión financiera</span>
