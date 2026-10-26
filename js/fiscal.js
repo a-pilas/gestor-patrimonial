@@ -89,7 +89,7 @@ export function renderFiscal(container) {
 
     <section class="card">
       <h3>Seguimiento de costes recurrentes</h3>
-      <p class="muted">A diferencia de las comisiones de arriba (puntuales, ya cobradas), esto es una estimación de lo que te cuesta cada año mantener lo que tienes: TER de los fondos, custodia, gestión y asesoramiento externo. Rellénalo poco a poco en Activos — no hace falta completarlo todo de golpe, empieza por tus mayores posiciones.</p>
+      <p class="muted">A diferencia de las comisiones de arriba (puntuales, ya cobradas), esto es una estimación de lo que te cuesta cada año mantener lo que tienes: TER de los fondos, custodia, gestión y asesoramiento externo. Para cada activo se usa su TER si lo tiene (como coste total) y, si no, la suma de custodia + gestión + asesoramiento. Rellénalo poco a poco en Activos — no hace falta completarlo todo de golpe, empieza por tus mayores posiciones.</p>
       <div class="kpi-row"><span>Con datos de costes introducidos</span><span>${fmtEUR(coberturaCostesData.valorConDatos)} de ${fmtEUR(coberturaCostesData.total)} (${fmtPct1(coberturaCostesData.pctConDatos)})</span></div>
       ${
         costes.valorConDatos > 0

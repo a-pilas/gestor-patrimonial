@@ -59,9 +59,9 @@ export const DEFAULT_CONCENTRACION_GEOGRAFICA_UMBRAL_PCT = 40;
 
 // Costes recurrentes estimados por activo financiero (opcional, se rellena
 // poco a poco igual que el look-through). Cada campo es un %/año sobre el
-// valor actual; se suman para el coste total estimado del activo.
+// valor actual. Si hay TER es el coste total del activo; si no, se suman los demás.
 export const COST_FIELDS = [
-  { key: "terPct", label: "TER anual del fondo (%, si aplica)" },
+  { key: "terPct", label: "TER anual / coste total (%, si lo indicas, se usa solo este)" },
   { key: "custodiaPct", label: "Comisión de custodia (%/año)" },
   { key: "gestionPct", label: "Comisión de gestión (%/año)" },
   { key: "asesoramientoPct", label: "Comisión de asesoramiento externo (%/año)" },

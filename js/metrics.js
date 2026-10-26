@@ -1170,15 +1170,20 @@ export function coberturaCostes() {
   return { total, valorConDatos, pctConDatos: total ? (valorConDatos / total) * 100 : 0, sinDatos };
 }
 
+// Si el activo tiene TER, ese es su coste (se entiende "todo incluido") y el
+// resto de campos se ignora; solo si el TER está en blanco se suman custodia,
+// gestión y asesoramiento. Un TER explícito de 0 también cuenta como TER.
 function costeTotalPctActivo(asset) {
-  return COST_FIELDS.reduce((s, f) => s + (Number(asset.costes?.[f.key]) || 0), 0);
+  const c = asset.costes;
+  if (!c) return 0;
+  if (c.terPct != null) return Number(c.terPct) || 0;
+  return COST_FIELDS.filter((f) => f.key !== "terPct").reduce((s, f) => s + (Number(c[f.key]) || 0), 0);
 }
 
-// Coste anual estimado (€/año) del patrimonio financiero, sumando para cada
-// activo con costes introducidos el % total (TER + custodia + gestión +
-// asesoramiento) sobre su valor actual. Los campos que dejes en blanco de un
-// activo cuentan como 0 en la suma — así que el coste real de ese activo
-// concreto puede ser algo mayor si te falta algún dato por rellenar.
+// Coste anual estimado (€/año) del patrimonio financiero: para cada activo
+// con costes introducidos, su % (el TER si lo hay; si no, custodia + gestión
+// + asesoramiento) sobre su valor actual. Si te falta algún dato, el coste
+// real de ese activo puede ser algo mayor.
 export function costeAnualEstimado() {
   const detalle = [];
   let totalEUR = 0;

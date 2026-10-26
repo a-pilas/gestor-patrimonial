@@ -122,7 +122,7 @@ export function renderCatalog(container) {
                   ).join("")}
                 </div>
                 <div id="costes-field" style="display:none">
-                  <p class="muted">Opcional: costes recurrentes anuales, para el seguimiento de costes de Fiscalidad. Déjalo en blanco lo que no sepas o no aplique (p.ej. TER en una acción individual) — no hace falta rellenarlo todo de golpe.</p>
+                  <p class="muted">Opcional: costes recurrentes anuales, para el seguimiento de costes de Fiscalidad. Si indicas el TER, la app lo toma como el coste total del activo (todo incluido) e ignora los otros campos; si lo dejas en blanco, suma custodia + gestión + asesoramiento. Si el coste real es mayor que el TER (p.ej. custodia de un ETF), indica ahí el total. No hace falta rellenarlo todo de golpe.</p>
                   ${COST_FIELDS.map(
                     (f) => `<label>${f.label} <input name="coste_${f.key}" type="number" min="0" step="any" value="${editing?.costes?.[f.key] ?? ""}" /></label>`
                   ).join("")}
