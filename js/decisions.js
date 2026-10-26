@@ -19,7 +19,7 @@ export function renderDecisions(container) {
     </div>
 
     <section class="card">
-      <p class="muted">Registro de propuestas recibidas del asesor (o de la entidad) y la decisión familiar tomada sobre cada una — para tener trazabilidad de por qué se aceptó, rechazó o modificó algo con el tiempo.</p>
+      <p class="muted">Registro de propuestas recibidas del asesor (o de la entidad) y la decisión familiar tomada sobre cada una — para tener trazabilidad de por qué se aceptó, rechazó o modificó algo con el tiempo. Mientras la estés pensando, déjala como "Propuesta a evaluar" y cámbiala cuando decidáis.</p>
       <div class="table-wrap">
         <table class="table table-history">
           <thead><tr><th>Fecha</th><th>Entidad</th><th>Asesor</th><th>Propuesta</th><th>Decisión</th><th>Notas</th><th></th></tr></thead>

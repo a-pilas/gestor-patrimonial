@@ -136,6 +136,7 @@ export const MOVEMENT_TYPES = {
 
 // Trazabilidad de propuestas del asesor vs. decisión familiar tomada (Fase 4).
 export const DECISION_STATUSES = {
+  a_evaluar: "Propuesta a evaluar",
   aceptada: "Aceptada",
   rechazada: "Rechazada",
   modificada: "Modificada",
