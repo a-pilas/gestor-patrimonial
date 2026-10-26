@@ -169,6 +169,7 @@ body {
 .ytd-box { display: flex; flex-direction: column; gap: 4px; }
 .ytd-label { color: var(--muted); font-size: 0.85rem; }
 .ytd-value { font-size: 1.4rem; font-weight: 700; }
+.ytd-eur { font-size: 0.95rem; font-weight: 600; }
 
 .risk-row { display: grid; grid-template-columns: 110px 1fr 40px; align-items: center; gap: 10px; margin: 10px 0; }
 .risk-track { background: #1c2b27; border-radius: 999px; height: 10px; overflow: hidden; }

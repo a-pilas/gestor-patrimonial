@@ -67,6 +67,9 @@ export function totalAportadoNeto() {
   for (const m of data.movements) {
     if (m.type === "aportacion" || m.type === "traspaso" || m.type === "compra") total += Number(m.amount) || 0;
     if (m.type === "retirada" || m.type === "venta") total -= Number(m.amount) || 0;
+    // Traspaso con activo de origen conocido: el dinero ya estaba en la app,
+    // así que no es capital nuevo — se resta lo que sale del origen.
+    if (m.type === "traspaso" && m.fromAssetId && assetById(m.fromAssetId)) total -= Number(m.amount) || 0;
   }
   return total;
 }
@@ -135,6 +138,17 @@ function flujoNetoEntreFiltrado(desde, hasta, assetFilter) {
   let flujo = 0;
   for (const m of data.movements) {
     if (m.date < desde || m.date > hasta) continue;
+    // Traspaso con activo de origen conocido: entra en el bloque del destino
+    // y sale del bloque del origen. Si ambos están en el mismo bloque (p.ej.
+    // de un fondo a otro) se compensan y no cuentan como capital nuevo.
+    if (m.type === "traspaso" && m.fromAssetId) {
+      const destino = m.assetId ? assetById(m.assetId) : null;
+      const origen = assetById(m.fromAssetId);
+      const importe = Number(m.amount) || 0;
+      if (destino && assetFilter(destino)) flujo += importe;
+      if (origen && assetFilter(origen)) flujo -= importe;
+      continue;
+    }
     if (!m.assetId) continue;
     const asset = assetById(m.assetId);
     if (!asset || !assetFilter(asset)) continue;
@@ -221,6 +235,30 @@ function calcularTwrAñoDetallado(assetFilter) {
   }
 
   return { pct: (cumFactor - 1) * 100, detalle };
+}
+
+// Revalorización YTD en euros de un bloque: lo que ha subido o bajado de
+// valor desde el 31/12 sin contar el dinero que has metido o sacado
+// (valor actual − valor a 31/12 − flujo neto del año). A diferencia del
+// TWR no encadena periodos, así que un desfase entre la fecha de un
+// movimiento y la de su posición no la distorsiona; sí la distorsiona un
+// movimiento que falte por registrar.
+function revalorizacionYtdEur(assetFilter) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const hoy = now.toISOString().slice(0, 10);
+  const valorInicio = valorFiltradoHasta(`${year - 1}-12-31`, assetFilter);
+  const valorActual = valorFiltradoHasta(hoy, assetFilter);
+  const flujo = flujoNetoEntreFiltrado(`${year}-01-01`, hoy, assetFilter);
+  return { valorInicio, valorActual, flujo, ganancia: valorActual - valorInicio - flujo };
+}
+
+export function revalorizacionYtdInversionFinanciera() {
+  return revalorizacionYtdEur(esInversionFinanciera);
+}
+
+export function revalorizacionYtdInmobiliario() {
+  return revalorizacionYtdEur(esInmobiliarioAsset);
 }
 
 export function rentabilidadYtdInversionFinancieraPct() {
@@ -317,6 +355,9 @@ export function aportadoNetoPorActivo(assetId) {
   const data = store.get();
   let total = purchasePriceAsAportado(assetById(assetId));
   for (const m of data.movements) {
+    // Lo que sale de este activo hacia otro tuyo (traspaso con origen) reduce
+    // su coste aportado: ese coste pasa al activo de destino.
+    if (m.type === "traspaso" && m.fromAssetId === assetId && m.assetId !== assetId) total -= Number(m.amount) || 0;
     if (m.assetId !== assetId) continue;
     if (m.type === "aportacion" || m.type === "traspaso" || m.type === "compra") total += Number(m.amount) || 0;
     if (m.type === "retirada" || m.type === "venta") total -= Number(m.amount) || 0;

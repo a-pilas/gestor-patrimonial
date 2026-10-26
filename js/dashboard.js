@@ -6,6 +6,8 @@ import {
   totalAportadoNeto,
   rentabilidadYtdInversionFinancieraPct,
   rentabilidadYtdInmobiliarioPct,
+  revalorizacionYtdInversionFinanciera,
+  revalorizacionYtdInmobiliario,
   detalleTwrInversionFinanciera,
   detalleTwrInmobiliario,
   riskScores,
@@ -91,6 +93,11 @@ function donutSvg(totals, total) {
     <text x="${cx}" y="${cy - 6}" text-anchor="middle" class="donut-total">${fmtEUR(total)}</text>
     <text x="${cx}" y="${cy + 16}" text-anchor="middle" class="donut-label">Patrimonio total</text>
   </svg>`;
+}
+
+function fmtEURSigned(n) {
+  if (n == null || isNaN(n)) return "—";
+  return `${n >= 0 ? "+" : "−"}${fmtEUR(Math.abs(n))}`;
 }
 
 function fmtPct1(n) {
@@ -624,6 +631,8 @@ export function renderDashboard(container) {
   const plusvalia = total - aportado;
   const ytd = rentabilidadYtdInversionFinancieraPct();
   const ytdInmobiliario = rentabilidadYtdInmobiliarioPct();
+  const revalFinanciera = revalorizacionYtdInversionFinanciera();
+  const revalInmobiliario = revalorizacionYtdInmobiliario();
   const benchmarkYtd = data.meta.benchmarkYtdPct;
   const risks = riskScores();
   const lastUpdate = fechaUltimaActualizacion();
@@ -696,6 +705,7 @@ export function renderDashboard(container) {
           <div class="ytd-box">
             <span class="ytd-label">Inversión financiera</span>
             <span class="ytd-value ${ytd >= 0 ? "pos" : "neg"}">${fmtPct(ytd)}</span>
+            <span class="ytd-eur ${revalFinanciera.ganancia >= 0 ? "pos" : "neg"}">${fmtEURSigned(revalFinanciera.ganancia)}</span>
           </div>
           <div class="ytd-box">
             <span class="ytd-label">${data.meta.benchmarkName}</span>
@@ -705,8 +715,10 @@ export function renderDashboard(container) {
           <div class="ytd-box">
             <span class="ytd-label">Inmobiliario</span>
             <span class="ytd-value ${ytdInmobiliario >= 0 ? "pos" : "neg"}">${fmtPct(ytdInmobiliario)}</span>
+            <span class="ytd-eur ${revalInmobiliario.ganancia >= 0 ? "pos" : "neg"}">${fmtEURSigned(revalInmobiliario.ganancia)}</span>
           </div>
         </div>
+        <p class="muted">En euros: lo que ha subido o bajado de valor este año sin contar el dinero que has metido o sacado (valor actual − valor a 31/12 − aportaciones netas del año). Si falta registrar algún movimiento, esta cifra sale distorsionada.</p>
         <button type="button" id="btn-toggle-twr-detail" class="link-btn">${showTwrDetail ? "Ocultar detalle del cálculo" : "Ver detalle del cálculo"}</button>
         ${showTwrDetail ? twrDetailSection() : ""}
       </section>

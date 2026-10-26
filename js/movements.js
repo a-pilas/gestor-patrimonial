@@ -49,7 +49,7 @@ export function renderMovements(container) {
                   const asset = assetById(m.assetId);
                   return `<tr>
                     <td>${m.date}</td>
-                    <td>${MOVEMENT_TYPES[m.type] || m.type}</td>
+                    <td>${MOVEMENT_TYPES[m.type] || m.type}${m.type === "traspaso" && m.fromAssetId ? ` <span class="muted">(desde ${assetById(m.fromAssetId)?.name || "—"})</span>` : ""}</td>
                     <td>${entity?.name || "—"}</td>
                     <td>${asset?.name || "—"}</td>
                     <td>${m.units ?? "—"}</td>
@@ -88,6 +88,12 @@ export function renderMovements(container) {
               .map((e) => `<option value="${e.id}" ${e.id === editing?.entityId ? "selected" : ""}>${e.name}</option>`)
               .join("")}</select>
           </label>
+          <label id="from-field" style="display:none">Activo de origen del traspaso
+            <select name="fromAssetId"><option value="">(viene de fuera de la app)</option>${data.assets
+              .map((a) => `<option value="${a.id}" ${a.id === editing?.fromAssetId ? "selected" : ""}>${assetLabel(a)}</option>`)
+              .join("")}</select>
+          </label>
+          <p id="from-help" class="muted" style="display:none">Si el dinero viene de otro activo que ya tienes en la app, indícalo: así no cuenta como capital nuevo en la rentabilidad ni en las revalorizaciones, y su coste aportado pasa del origen al destino.</p>
           <label id="units-field" style="display:none">Unidades / participaciones
             <input name="units" type="number" step="any" value="${editing?.units ?? ""}" />
           </label>
@@ -103,6 +109,9 @@ export function renderMovements(container) {
       const form = body.querySelector("#form-movement");
       const assetSelect = form.querySelector('select[name="assetId"]');
       const entitySelect = form.querySelector('select[name="entityId"]');
+      const typeSelect = form.querySelector('select[name="type"]');
+      const fromField = form.querySelector("#from-field");
+      const fromHelp = form.querySelector("#from-help");
       const unitsField = form.querySelector("#units-field");
       const navField = form.querySelector("#nav-field");
       const unitsInput = form.querySelector('input[name="units"]');
@@ -132,14 +141,22 @@ export function renderMovements(container) {
         if (!isNaN(units) && !isNaN(nav)) amountInput.value = (units * nav).toFixed(2);
       }
 
+      function refreshFromVisibility() {
+        const show = typeSelect.value === "traspaso";
+        fromField.style.display = show ? "" : "none";
+        fromHelp.style.display = show ? "" : "none";
+      }
+
       assetSelect.addEventListener("change", () => {
         refreshEntityFromAsset();
         refreshUnitsVisibility();
       });
+      typeSelect.addEventListener("change", refreshFromVisibility);
       unitsInput.addEventListener("input", recalcAmount);
       navInput.addEventListener("input", recalcAmount);
       refreshEntityFromAsset();
       refreshUnitsVisibility();
+      refreshFromVisibility();
 
       form.addEventListener("submit", (ev) => {
         ev.preventDefault();
@@ -154,6 +171,7 @@ export function renderMovements(container) {
           navValue: fd.get("navValue") ? Number(fd.get("navValue")) : null,
           amount: Number(fd.get("amount")),
           notes: fd.get("notes") || "",
+          fromAssetId: fd.get("type") === "traspaso" && fd.get("fromAssetId") && fd.get("fromAssetId") !== fd.get("assetId") ? fd.get("fromAssetId") : null,
         };
         if (editing) {
           store.updateMovement(editing.id, payload);
