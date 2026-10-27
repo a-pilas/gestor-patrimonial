@@ -72,7 +72,7 @@ export function renderMovements(container) {
     openModal(editing ? "Editar movimiento" : "Nuevo movimiento", (body, closeModal) => {
       body.innerHTML = `
         <form id="form-movement" class="stacked-form">
-          <label>Fecha <input name="date" type="date" value="${editing?.date || todayIso()}" required /></label>
+          <label>Fecha <input name="date" type="date" min="2000-01-01" value="${editing?.date || todayIso()}" required /></label>
           <label>Tipo
             <select name="type" required>${Object.entries(MOVEMENT_TYPES)
               .map(([k, v]) => `<option value="${k}" ${k === editing?.type ? "selected" : ""}>${v}</option>`)

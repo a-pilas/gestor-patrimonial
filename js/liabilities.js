@@ -108,7 +108,7 @@ export function renderLiabilities(container) {
       const firstLiabilityId = editingPos?.liabilityId || presetLiabilityId || data.liabilities[0].id;
       body.innerHTML = `
         <form id="form-balance" class="stacked-form">
-          <label>Fecha <input name="date" type="date" value="${editingPos?.date || todayIso()}" required /></label>
+          <label>Fecha <input name="date" type="date" min="2000-01-01" value="${editingPos?.date || todayIso()}" required /></label>
           <label>Pasivo
             <select name="liabilityId" required>${data.liabilities
               .map((l) => `<option value="${l.id}" ${l.id === firstLiabilityId ? "selected" : ""}>${l.name}</option>`)

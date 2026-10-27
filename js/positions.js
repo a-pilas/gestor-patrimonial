@@ -247,7 +247,7 @@ export function renderPositions(container) {
 
       body.innerHTML = `
         <form id="form-position" class="stacked-form">
-          <label>Fecha <input name="date" type="date" value="${editing?.date || todayIso()}" required /></label>
+          <label>Fecha <input name="date" type="date" min="2000-01-01" value="${editing?.date || todayIso()}" required /></label>
           <label>Activo
             <select name="assetId" required>${data.assets
               .map((a) => `<option value="${a.id}" ${a.id === firstAssetId ? "selected" : ""}>${assetLabel(a)}</option>`)
@@ -507,7 +507,7 @@ function renderBulkUpdate(container, data) {
     </div>
 
     <section class="card">
-      <label>Fecha de esta actualización <input type="date" id="bulk-date" value="${todayIso()}" required /></label>
+      <label>Fecha de esta actualización <input type="date" id="bulk-date" min="2000-01-01" value="${todayIso()}" required /></label>
       <p class="muted">Deja un campo en blanco para no registrar ninguna posición nueva en ese activo o deuda.</p>
     </section>
 
