@@ -25,13 +25,26 @@ function fmtEUR(n) {
   return Number(n).toLocaleString("es-ES", { style: "currency", currency: "EUR" });
 }
 
+// Plusvalía sobre lo aportado, en %. Es una foto simple (sin tiempo ni
+// aportaciones escalonadas); con aportado <= 0 (p.ej. coste traspasado a otro
+// activo) el cociente no significa nada, así que no se muestra.
+function variacionPct(plusvalia, aportado) {
+  if (plusvalia == null || !(aportado > 0)) return null;
+  return (plusvalia / aportado) * 100;
+}
+
+function fmtVariacion(pct) {
+  if (pct == null) return "—";
+  return `${pct >= 0 ? "+" : ""}${pct.toLocaleString("es-ES", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`;
+}
+
 // Exporta el Resumen por activo tal cual se está viendo (respeta los filtros
 // de entidad y de tipo, y si se muestran o no las posiciones a cero), con una columna
 // "Fecha actualización" (la de la última posición de cada activo) que no se
 // enseña en la tabla en pantalla. CSV con ; y coma decimal para que Excel en
 // español lo abra bien directamente, sin depender de ninguna librería externa.
 function exportarResumenExcel(rows, entityName) {
-  const header = ["Activo", "Entidad", "Aportado", "Valor actual", "Plusvalía", "Fecha actualización"];
+  const header = ["Activo", "Entidad", "Aportado", "Valor actual", "Plusvalía", "Variación (%)", "Fecha actualización"];
   const numero = (n) => (n != null ? n.toFixed(2).replace(".", ",") : "");
   const celda = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const filas = rows.map((r) => [
@@ -40,6 +53,7 @@ function exportarResumenExcel(rows, entityName) {
     numero(r.aportado),
     numero(r.valorActual),
     numero(r.plusvalia),
+    numero(variacionPct(r.plusvalia, r.aportado)),
     r.fechaActualizacion || "",
   ]);
   const csv = [header, ...filas].map((fila) => fila.map(celda).join(";")).join("\r\n");
@@ -151,7 +165,7 @@ export function renderPositions(container) {
       </div>
       <div class="table-wrap">
         <table class="table">
-          <thead><tr><th>Activo</th><th>Entidad</th><th>Aportado</th><th>Valor actual</th><th>Plusvalía</th></tr></thead>
+          <thead><tr><th>Activo</th><th>Entidad</th><th>Aportado</th><th>Valor actual</th><th>Plusvalía</th><th>Variación</th></tr></thead>
           <tbody>
             ${
               resumenRows
@@ -162,10 +176,11 @@ export function renderPositions(container) {
                     <td>${fmtEUR(r.aportado)}</td>
                     <td>${r.valorActual != null ? fmtEUR(r.valorActual) : `<button data-add-position="${r.asset.id}" class="link-btn danger">sin posición, añadir</button>`}</td>
                     <td class="${r.plusvalia >= 0 ? "pos" : "neg"}">${r.plusvalia != null ? fmtEUR(r.plusvalia) : "—"}</td>
+                    <td class="${r.plusvalia >= 0 ? "pos" : "neg"}">${fmtVariacion(variacionPct(r.plusvalia, r.aportado))}</td>
                   </tr>`
                 )
                 .join("") ||
-              `<tr><td colspan="5" class="muted">${hayFiltros ? "Ningún activo coincide con los filtros" : "Sin activos todavía"}</td></tr>`
+              `<tr><td colspan="6" class="muted">${hayFiltros ? "Ningún activo coincide con los filtros" : "Sin activos todavía"}</td></tr>`
             }
           </tbody>
           ${
@@ -175,6 +190,7 @@ export function renderPositions(container) {
                   <td><strong>${fmtEUR(totalSegmento.aportado)}</strong></td>
                   <td><strong>${fmtEUR(totalSegmento.valor)}</strong></td>
                   <td class="${totalSegmento.plusvalia >= 0 ? "pos" : "neg"}"><strong>${fmtEUR(totalSegmento.plusvalia)}</strong></td>
+                  <td class="${totalSegmento.plusvalia >= 0 ? "pos" : "neg"}"><strong>${fmtVariacion(variacionPct(totalSegmento.plusvalia, totalSegmento.aportado))}</strong></td>
                 </tr></tfoot>`
               : ""
           }
