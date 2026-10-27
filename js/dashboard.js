@@ -1,9 +1,9 @@
-import { ASSET_CLASSES, RISK_SCALE_MAX } from "./model.js";
+import { ASSET_CLASSES, RISK_SCALE_MAX, LIQUIDEZ_OPERATIVA_SUBCLASSES } from "./model.js";
 import { store } from "./store.js";
 import {
   totalsByClass,
   totalPatrimonio,
-  totalAportadoNeto,
+  plusvaliaAcumuladaInversiones,
   rentabilidadYtdInversionFinancieraPct,
   rentabilidadYtdInmobiliarioPct,
   revalorizacionYtdInversionFinanciera,
@@ -627,8 +627,7 @@ export function renderDashboard(container) {
   const data = store.get();
   const totals = totalsByClass();
   const total = totalPatrimonio();
-  const aportado = totalAportadoNeto();
-  const plusvalia = total - aportado;
+  const inversiones = plusvaliaAcumuladaInversiones();
   const ytd = rentabilidadYtdInversionFinancieraPct();
   const ytdInmobiliario = rentabilidadYtdInmobiliarioPct();
   const revalFinanciera = revalorizacionYtdInversionFinanciera();
@@ -637,6 +636,8 @@ export function renderDashboard(container) {
   const risks = riskScores();
   const lastUpdate = fechaUltimaActualizacion();
   const missing = assetsWithoutPosition();
+  // La plusvalía no incluye liquidez operativa, así que una cuenta sin valor registrado no la bloquea.
+  const missingInversion = missing.filter((a) => !LIQUIDEZ_OPERATIVA_SUBCLASSES.includes(a.subclass));
   const deuda = totalDeudaPendiente();
   const neto = patrimonioNeto();
 
@@ -686,9 +687,11 @@ export function renderDashboard(container) {
       <section class="card card-summary">
         <h3>Resumen</h3>
         <div class="kpi-row"><span>Patrimonio total</span><strong>${fmtEUR(total)}</strong></div>
-        <div class="kpi-row"><span>Aportado neto</span><strong>${fmtEUR(aportado)}</strong></div>
-        <div class="kpi-row"><span>Plusvalía acumulada</span><strong class="${plusvalia >= 0 ? "pos" : "neg"}">${missing.length ? "—" : fmtEUR(plusvalia)}</strong></div>
-        ${missing.length ? `<p class="muted">No se calcula hasta que todos los activos tengan una posición con su valor actual.</p>` : ""}
+        <div class="kpi-row"><span>Inversiones e inmuebles</span><strong>${fmtEUR(inversiones.valor)}</strong></div>
+        <div class="kpi-row"><span>Aportado neto</span><strong>${fmtEUR(inversiones.aportado)}</strong></div>
+        <div class="kpi-row"><span>Plusvalía acumulada</span><strong class="${inversiones.plusvalia >= 0 ? "pos" : "neg"}">${missingInversion.length ? "—" : `${fmtEUR(inversiones.plusvalia)}${inversiones.pct != null ? ` (${fmtPct(inversiones.pct)})` : ""}`}</strong></div>
+        <p class="muted">Aportado y plusvalía se calculan sobre inversiones e inmuebles, sin cuentas corrientes, remuneradas ni depósitos: su saldo cambia por gastos, nóminas y vencimientos que casi nunca se registran como movimientos y daba pérdidas ficticias.</p>
+        ${missingInversion.length ? `<p class="muted">No se calcula hasta que todas las inversiones e inmuebles tengan una posición con su valor actual.</p>` : ""}
         ${
           deuda
             ? `<div class="kpi-row"><span>Deudas</span><strong class="neg">−${fmtEUR(deuda)}</strong></div>

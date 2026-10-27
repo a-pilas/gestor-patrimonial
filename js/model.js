@@ -54,6 +54,11 @@ export const GEO_REGIONS_EUR = ["espana", "europa"];
 // corto plazo de países concretos) que puede merecer la pena desglosar.
 export const LIQUIDEZ_OPERATIVA_SUBCLASSES = ["Cuenta corriente", "Cuenta remunerada", "Depósito a plazo"];
 
+// Subclases cuyo saldo sube y baja por nómina, gastos, etc. que casi nunca se
+// registran como Movimientos: "aportado", plusvalía y % no significan nada.
+// (Los depósitos a plazo sí: su aportado es fijo y la plusvalía son intereses.)
+export const SUBCLASSES_SIN_RENTABILIDAD = ["Cuenta corriente", "Cuenta remunerada"];
+
 export const DEFAULT_XRAY_REVISION_DIAS_AVISO = 180;
 export const DEFAULT_CONCENTRACION_GEOGRAFICA_UMBRAL_PCT = 40;
 

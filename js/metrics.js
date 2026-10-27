@@ -74,6 +74,24 @@ export function totalAportadoNeto() {
   return total;
 }
 
+// Plusvalía acumulada de lo que de verdad está invertido (inversión financiera
+// + inmobiliario), sin liquidez operativa (cuentas corrientes, remuneradas y
+// depósitos) ni en el valor ni en lo aportado. Con la liquidez dentro, el
+// dinero que pasa de un depósito vencido a un fondo se contaba como aportado
+// dos veces y los saldos de las cuentas aparecían como pérdidas ficticias.
+export function plusvaliaAcumuladaInversiones() {
+  const data = store.get();
+  const esLiquidez = (a) => LIQUIDEZ_OPERATIVA_SUBCLASSES.includes(a.subclass);
+  let valor = 0;
+  for (const p of latestPositionsByAssetEntity()) {
+    const asset = assetById(p.assetId);
+    if (asset && !esLiquidez(asset)) valor += valueOfPosition(p);
+  }
+  let aportado = 0;
+  for (const a of data.assets) if (!esLiquidez(a)) aportado += aportadoNetoPorActivo(a.id);
+  return { valor, aportado, plusvalia: valor - aportado, pct: aportado > 0 ? ((valor - aportado) / aportado) * 100 : null };
+}
+
 // Valor total (financiero + inmobiliario) en o antes de una fecha de corte
 // dada, por (entidad, activo) — la última posición conocida hasta ese punto.
 function valorTotalHasta(cutoff) {

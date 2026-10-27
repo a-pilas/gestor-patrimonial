@@ -1,6 +1,7 @@
 import { UNIT_TRADED_SUBCLASSES, REAL_ESTATE_SUBCLASSES } from "./model.js";
 import { store, latestPositionsByAssetEntity, latestLiabilityPositions } from "./store.js";
 import { aportadoNetoPorActivo, valueOfPosition } from "./metrics.js";
+import { SUBCLASSES_SIN_RENTABILIDAD } from "./model.js";
 import { openModal } from "./modal.js";
 
 let bulkMode = false;
@@ -90,12 +91,14 @@ export function renderPositions(container) {
     .map((a) => {
       const latest = latestPositionsByAssetEntity().find((p) => p.assetId === a.id);
       const valorActual = latest ? valueOfPosition(latest) : null;
-      const aportado = aportadoNetoPorActivo(a.id);
-      const plusvalia = valorActual != null ? valorActual - aportado : null;
+      // Cuentas corrientes/remuneradas: sin aportado, plusvalía ni variación.
+      const sinRentabilidad = SUBCLASSES_SIN_RENTABILIDAD.includes(a.subclass);
+      const aportado = sinRentabilidad ? null : aportadoNetoPorActivo(a.id);
+      const plusvalia = valorActual != null && aportado != null ? valorActual - aportado : null;
       // No se muestra en la tabla en pantalla, pero sí se incluye en la
       // exportación a Excel (columna "Fecha actualización").
       const fechaActualizacion = latest ? latest.date : null;
-      return { asset: a, valorActual, aportado, plusvalia, fechaActualizacion };
+      return { asset: a, valorActual, aportado, plusvalia, fechaActualizacion, sinRentabilidad };
     })
     .sort((a, b) => {
       const entityCmp = entityName(a.asset.entityId).localeCompare(entityName(b.asset.entityId), "es");
@@ -121,6 +124,8 @@ export function renderPositions(container) {
   const resumenRowsZero = resumenSegmento.filter((r) => r.valorActual != null && r.valorActual <= 0);
   const resumenRows = showZeroPositions ? resumenSegmento : resumenSegmento.filter((r) => r.valorActual == null || r.valorActual > 0);
   const hayFiltros = resumenEntityFilter !== "todas" || resumenTypeFilter.size > 0;
+  const segmentoConCuentas = resumenRows.some((r) => r.sinRentabilidad);
+  const segmentoSoloCuentas = resumenRows.length > 0 && resumenRows.every((r) => r.sinRentabilidad);
   const totalSegmento = resumenRows.reduce(
     (t, r) => ({ aportado: t.aportado + (r.aportado || 0), valor: t.valor + (r.valorActual || 0), plusvalia: t.plusvalia + (r.plusvalia || 0) }),
     { aportado: 0, valor: 0, plusvalia: 0 }
@@ -173,10 +178,10 @@ export function renderPositions(container) {
                   (r) => `<tr${r.valorActual != null && r.valorActual <= 0 ? ' class="row-zero"' : ""}>
                     <td>${r.asset.name}</td>
                     <td>${entityName(r.asset.entityId)}</td>
-                    <td>${fmtEUR(r.aportado)}</td>
+                    <td>${r.aportado != null ? fmtEUR(r.aportado) : ""}</td>
                     <td>${r.valorActual != null ? fmtEUR(r.valorActual) : `<button data-add-position="${r.asset.id}" class="link-btn danger">sin posición, añadir</button>`}</td>
-                    <td class="${r.plusvalia >= 0 ? "pos" : "neg"}">${r.plusvalia != null ? fmtEUR(r.plusvalia) : "—"}</td>
-                    <td class="${r.plusvalia >= 0 ? "pos" : "neg"}">${fmtVariacion(variacionPct(r.plusvalia, r.aportado))}</td>
+                    <td class="${r.plusvalia >= 0 ? "pos" : "neg"}">${r.plusvalia != null ? fmtEUR(r.plusvalia) : r.sinRentabilidad ? "" : "—"}</td>
+                    <td class="${r.plusvalia >= 0 ? "pos" : "neg"}">${r.sinRentabilidad ? "" : fmtVariacion(variacionPct(r.plusvalia, r.aportado))}</td>
                   </tr>`
                 )
                 .join("") ||
@@ -187,15 +192,20 @@ export function renderPositions(container) {
             hayFiltros && resumenRows.length
               ? `<tfoot><tr>
                   <td colspan="2"><strong>Total del segmento (${resumenRows.length})</strong></td>
-                  <td><strong>${fmtEUR(totalSegmento.aportado)}</strong></td>
+                  <td><strong>${segmentoSoloCuentas ? "" : fmtEUR(totalSegmento.aportado)}</strong></td>
                   <td><strong>${fmtEUR(totalSegmento.valor)}</strong></td>
-                  <td class="${totalSegmento.plusvalia >= 0 ? "pos" : "neg"}"><strong>${fmtEUR(totalSegmento.plusvalia)}</strong></td>
-                  <td class="${totalSegmento.plusvalia >= 0 ? "pos" : "neg"}"><strong>${fmtVariacion(variacionPct(totalSegmento.plusvalia, totalSegmento.aportado))}</strong></td>
+                  <td class="${totalSegmento.plusvalia >= 0 ? "pos" : "neg"}"><strong>${segmentoSoloCuentas ? "" : fmtEUR(totalSegmento.plusvalia)}</strong></td>
+                  <td class="${totalSegmento.plusvalia >= 0 ? "pos" : "neg"}"><strong>${segmentoSoloCuentas ? "" : fmtVariacion(variacionPct(totalSegmento.plusvalia, totalSegmento.aportado))}</strong></td>
                 </tr></tfoot>`
               : ""
           }
         </table>
       </div>
+      ${
+        hayFiltros && segmentoConCuentas && !segmentoSoloCuentas
+          ? `<p class="muted">Las cuentas corrientes y remuneradas suman en el Valor del total, pero no en Aportado, Plusvalía ni Variación (su saldo no tiene rentabilidad).</p>`
+          : ""
+      }
       ${
         resumenRowsZero.length
           ? `<button type="button" id="btn-toggle-zero" class="link-btn">${showZeroPositions ? "Ocultar posiciones a cero" : `Ver también posiciones a cero (${resumenRowsZero.length})`}</button>`
