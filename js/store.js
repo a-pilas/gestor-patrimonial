@@ -94,7 +94,16 @@ export const store = {
     return a;
   },
   updateAsset(id, patch) {
+    const anterior = data.assets.find((a) => a.id === id);
     data.assets = data.assets.map((a) => (a.id === id ? { ...a, ...patch } : a));
+    // Las posiciones se agrupan por entidad+activo: si el activo cambia de
+    // entidad, su histórico se mueve con él. Si no, el valor de ese activo se
+    // contaría dos veces en cuanto se registrara una posición nueva.
+    if (anterior && "entityId" in patch && (patch.entityId || null) !== (anterior.entityId || null)) {
+      const nueva = patch.entityId || null;
+      for (const p of data.positions) if (p.assetId === id) p.entityId = nueva;
+      for (const m of data.movements) if (m.assetId === id) m.entityId = nueva;
+    }
     persist();
   },
   removeAsset(id) {
