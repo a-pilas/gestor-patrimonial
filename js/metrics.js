@@ -173,6 +173,11 @@ function flujosDatadosEntreFiltrado(desde, hasta, assetFilter) {
     const importe = Number(m.amount) || 0;
     if (m.type === "aportacion" || m.type === "traspaso" || m.type === "compra") flujos.push({ date: m.date, importe });
     if (m.type === "retirada" || m.type === "venta") flujos.push({ date: m.date, importe: -importe });
+    // Dividendo/cupón cobrado: el dinero sale del activo hacia la cuenta, así
+    // que cuenta como una salida del bloque y por tanto como ganancia (el
+    // valor del bloque no lo incluye). No es capital aportado, así que no
+    // pasa por totalAportadoNeto/aportadoNetoPorActivo.
+    if (m.type === "dividendo") flujos.push({ date: m.date, importe: -importe });
   }
   for (const a of data.assets) {
     if (!assetFilter(a)) continue;

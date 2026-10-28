@@ -94,6 +94,7 @@ export function renderMovements(container) {
               .join("")}</select>
           </label>
           <p id="from-help" class="muted" style="display:none">Si el dinero viene de otro activo que ya tienes en la app, indícalo: así no cuenta como capital nuevo en la rentabilidad ni en las revalorizaciones, y su coste aportado pasa del origen al destino.</p>
+          <p id="div-help" class="muted" style="display:none">Un dividendo o cupón cobrado en efectivo cuenta como ganancia de ese activo en la rentabilidad YTD y en la revalorización de Inicio. Si cobras en acciones nuevas (scrip), no lo registres aquí: el valor de las acciones nuevas ya sube la posición cuando la actualices.</p>
           <label id="units-field" style="display:none">Unidades / participaciones
             <input name="units" type="number" step="any" value="${editing?.units ?? ""}" />
           </label>
@@ -112,6 +113,7 @@ export function renderMovements(container) {
       const typeSelect = form.querySelector('select[name="type"]');
       const fromField = form.querySelector("#from-field");
       const fromHelp = form.querySelector("#from-help");
+      const divHelp = form.querySelector("#div-help");
       const unitsField = form.querySelector("#units-field");
       const navField = form.querySelector("#nav-field");
       const unitsInput = form.querySelector('input[name="units"]');
@@ -145,6 +147,7 @@ export function renderMovements(container) {
         const show = typeSelect.value === "traspaso";
         fromField.style.display = show ? "" : "none";
         fromHelp.style.display = show ? "" : "none";
+        divHelp.style.display = typeSelect.value === "dividendo" ? "" : "none";
       }
 
       assetSelect.addEventListener("change", () => {

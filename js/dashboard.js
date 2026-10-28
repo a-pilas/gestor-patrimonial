@@ -703,7 +703,7 @@ export function renderDashboard(container) {
 
       <section class="card card-ytd">
         <h3>Rentabilidad YTD — Inversión financiera</h3>
-        <p class="muted">Ganancia del año (valor actual − valor a 31/12 − aportaciones netas) dividida entre el capital medio invertido, contando cada aportación solo por los días que ha estado dentro (Dietz modificado). Así las aportaciones no inflan la rentabilidad y las actualizaciones de posiciones a medias no la distorsionan. Excluye cuentas corrientes e inmobiliario — la liquidez operativa no tiene "rentabilidad" y mezclarla distorsiona el cálculo.</p>
+        <p class="muted">Ganancia del año (valor actual − valor a 31/12 − aportaciones netas + dividendos y cupones cobrados) dividida entre el capital medio invertido, contando cada aportación solo por los días que ha estado dentro (Dietz modificado). Así las aportaciones no inflan la rentabilidad y las actualizaciones de posiciones a medias no la distorsionan. Excluye cuentas corrientes e inmobiliario — la liquidez operativa no tiene "rentabilidad" y mezclarla distorsiona el cálculo.</p>
         <div class="ytd-compare">
           <div class="ytd-box">
             <span class="ytd-label">Inversión financiera</span>
