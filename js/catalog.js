@@ -25,6 +25,7 @@ function fmtEUR(n) {
 
 let editingAssetId = null;
 let showHistoricAssets = false;
+let showEntities = false;
 
 export function renderCatalog(container) {
   const data = store.get();
@@ -53,18 +54,27 @@ export function renderCatalog(container) {
   );
   const sortedAssets = showHistoricAssets ? allSortedAssets : allSortedAssets.filter((a) => !historicIds.has(a.id));
 
+  const mostrarEntidades = showEntities || sortedEntities.length === 0;
+
   container.innerHTML = `
     <section class="card">
-      <h3>Entidades</h3>
-      <form id="form-entity" class="inline-form">
-        <input name="name" placeholder="Nombre de la entidad (ej. MyInvestor)" required />
-        <button type="submit">Añadir</button>
-      </form>
-      <ul class="entity-chips">
-        ${sortedEntities
-          .map((e) => `<li>${e.name} <button data-remove-entity="${e.id}" class="link-btn danger">×</button></li>`)
-          .join("") || '<li class="muted">Sin entidades todavía</li>'}
-      </ul>
+      <div class="section-head">
+        <h3>Entidades (${sortedEntities.length})</h3>
+        ${sortedEntities.length ? `<button type="button" id="btn-toggle-entities" class="link-btn">${showEntities ? "Ocultar" : "Gestionar"}</button>` : ""}
+      </div>
+      ${
+        mostrarEntidades
+          ? `<form id="form-entity" class="inline-form">
+              <input name="name" placeholder="Nombre de la entidad (ej. MyInvestor)" required />
+              <button type="submit">Añadir</button>
+            </form>
+            <ul class="entity-chips">
+              ${sortedEntities
+                .map((e) => `<li>${e.name} <button data-remove-entity="${e.id}" class="link-btn danger">×</button></li>`)
+                .join("") || '<li class="muted">Sin entidades todavía</li>'}
+            </ul>`
+          : ""
+      }
     </section>
 
     <section class="card">
@@ -251,7 +261,12 @@ export function renderCatalog(container) {
     refreshCostesField();
   }
 
-  container.querySelector("#form-entity").addEventListener("submit", (ev) => {
+  container.querySelector("#btn-toggle-entities")?.addEventListener("click", () => {
+    showEntities = !showEntities;
+    renderCatalog(container);
+  });
+
+  container.querySelector("#form-entity")?.addEventListener("submit", (ev) => {
     ev.preventDefault();
     const fd = new FormData(ev.target);
     store.addEntity(fd.get("name").trim());
@@ -330,8 +345,24 @@ export function renderCatalog(container) {
 
   container.querySelectorAll("[data-remove-entity]").forEach((btn) =>
     btn.addEventListener("click", () => {
-      if (confirm("¿Eliminar esta entidad? Los activos y posiciones asociados no se borrarán automáticamente.")) {
-        store.removeEntity(btn.dataset.removeEntity);
+      const id = btn.dataset.removeEntity;
+      const nombre = data.entities.find((e) => e.id === id)?.name || "Esta entidad";
+      const activos = data.assets.filter((a) => a.entityId === id).length;
+      const posiciones = data.positions.filter((p) => p.entityId === id).length;
+      const movimientos = data.movements.filter((m) => m.entityId === id).length;
+      // Con datos asociados no se puede borrar: los activos quedarían sin
+      // entidad y desaparecerían de los filtros y agrupaciones por entidad.
+      if (activos || posiciones || movimientos) {
+        const partes = [
+          activos && `${activos} activo${activos === 1 ? "" : "s"}`,
+          posiciones && `${posiciones} posicion${posiciones === 1 ? "" : "es"}`,
+          movimientos && `${movimientos} movimiento${movimientos === 1 ? "" : "s"}`,
+        ].filter(Boolean);
+        alert(`${nombre} tiene ${partes.join(", ")} asociados, así que no se puede eliminar. Si ya no la usas, déjala: sus activos pasarán a históricos al quedar a 0 y no molesta. Si la creaste por error, primero elimina o reasigna esos datos.`);
+        return;
+      }
+      if (confirm(`¿Eliminar la entidad ${nombre}?`)) {
+        store.removeEntity(id);
         renderCatalog(container);
       }
     })
