@@ -378,8 +378,21 @@ dialog.app-modal::backdrop { background: rgba(0, 0, 0, 0.55); }
   .ytd-value { font-size: 1.05rem; white-space: nowrap; }
   .ytd-label { font-size: 0.75rem; }
   .ytd-eur { font-size: 0.85rem; }
+  .print-page-start { break-before: page; page-break-before: always; }
+  /* Tarjetas compactadas para que las tres últimas quepan en una hoja */
+  .print-compact { padding: 10px 14px; margin-bottom: 10px; }
+  .print-compact h3 { font-size: 1rem; margin: 0 0 4px; }
+  .print-compact .muted { margin: 2px 0 6px; font-size: 0.75rem; }
+  .print-compact .table { font-size: 0.78rem; }
+  .print-compact .table th, .print-compact .table td { padding: 3px 6px; }
+  .print-compact .kpi-row { padding: 3px 0; }
+  .print-compact .evo-chart { height: 110px; padding-top: 24px; gap: 6px; }
+  .print-compact .evo-bar-year { margin-top: 3px; }
+  /* Tabla final por activo: una hoja, texto pequeño pero legible */
   .print-resumen { break-before: page; page-break-before: always; }
-  .print-resumen .table { font-size: 0.78rem; }
+  .print-resumen h3 { font-size: 1rem; margin: 0 0 6px; }
+  .print-resumen .table { font-size: 0.74rem; }
+  .print-resumen .table th, .print-resumen .table td { padding: 3px 5px; line-height: 1.25; }
   .print-resumen thead { display: table-header-group; }
   .print-resumen tr { break-inside: avoid; page-break-inside: avoid; }
   .stackbar, .risk-track { background: #e3e9e6; }

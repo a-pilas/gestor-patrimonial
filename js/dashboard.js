@@ -496,9 +496,9 @@ function plusvaliaCard() {
   const suma = (campo) => filas.reduce((s, [, b]) => s + b[campo], 0);
   const celda = (n) => `<td class="${n >= 0 ? "pos" : "neg"}">${fmtEUR(n)}</td>`;
   return `
-    <section class="card">
+    <section class="card print-compact">
       <h3>Plusvalía realizada vs. latente</h3>
-      <p class="muted">No incluye cuentas corrientes, remuneradas ni depósitos. Realizada: activos ya vendidos o retirados por completo. Latente: lo que sigues manteniendo. Un activo recién dado de alta sin posición ni venta registrada todavía no cuenta en ninguna de las dos.</p>
+      <p class="muted">Sin cuentas corrientes, remuneradas ni depósitos. Realizada: activos vendidos del todo; latente: lo que mantienes.<span class="no-print"> Un activo recién dado de alta sin posición ni venta registrada no cuenta en ninguna de las dos.</span></p>
       <div class="table-wrap">
         <table class="table">
           <thead><tr><th></th><th>Latente</th><th>Realizada</th><th>Total</th></tr></thead>
@@ -518,7 +518,7 @@ function liquidityEvolutionCard() {
   const points = evolucionMensualLiquidez();
   if (points.length < 2) {
     return `
-      <section class="card">
+      <section class="card print-compact print-page-start">
         <h3>Colchón de liquidez en el tiempo</h3>
         <p class="muted">Necesitas posiciones de liquidez de al menos dos meses distintos para ver la evolución.</p>
       </section>
@@ -551,7 +551,7 @@ function liquidityEvolutionCard() {
     .join("");
 
   return `
-    <section class="card">
+    <section class="card print-compact print-page-start">
       <h3>Colchón de liquidez en el tiempo</h3>
       <p class="muted">Cuentas corrientes + ahorro + depósitos, mes a mes.</p>
       <div class="evo-chart">${bars}</div>
@@ -562,7 +562,7 @@ function liquidityEvolutionCard() {
 function financialByEntityTable() {
   const { rows, total } = financialTotalsByEntity();
   return `
-    <section class="card">
+    <section class="card print-compact">
       <h3>Patrimonio financiero por entidad</h3>
       <p class="muted">Ordenado de mayor a menor, excluye inmobiliario.</p>
       <div class="table-wrap">
