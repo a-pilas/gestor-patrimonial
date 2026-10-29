@@ -590,13 +590,18 @@ export function evolucionAnualPatrimonio() {
 // "latente" para ese activo (no hay un desglose por lote/participación
 // individual) — separarlo del todo requeriría trackear coste por lote, que
 // hoy no se registra.
-export function plusvaliaRealizadaVsLatente() {
+// Plusvalía latente/realizada partida en tres bloques: inversión financiera,
+// inmuebles (sin la vivienda habitual) y vivienda habitual.
+export function plusvaliaRealizadaVsLatentePorBloque() {
   const data = store.get();
   const latestByAsset = new Map();
   for (const p of latestPositionsByAssetEntity()) latestByAsset.set(p.assetId, p);
 
-  let latente = 0;
-  let realizada = 0;
+  const bloques = {
+    financiera: { latente: 0, realizada: 0 },
+    inmobiliaria: { latente: 0, realizada: 0 },
+    viviendaHabitual: { latente: 0, realizada: 0 },
+  };
 
   for (const asset of data.assets) {
     // Sin liquidez operativa (cuentas corrientes, remuneradas, depósitos): su
@@ -604,16 +609,24 @@ export function plusvaliaRealizadaVsLatente() {
     // vencido seguía contando como aportado. Mismo criterio que la plusvalía
     // acumulada de Inicio.
     if (LIQUIDEZ_OPERATIVA_SUBCLASSES.includes(asset.subclass)) continue;
+    const bloque = bloques[asset.class !== "inmobiliario" ? "financiera" : asset.viviendaHabitual ? "viviendaHabitual" : "inmobiliaria"];
     const aportado = aportadoNetoPorActivo(asset.id);
     const latest = latestByAsset.get(asset.id);
     if (latest) {
-      latente += valueOfPosition(latest) - aportado;
+      bloque.latente += valueOfPosition(latest) - aportado;
       continue;
     }
     const fueVendidoORetirado = data.movements.some((m) => m.assetId === asset.id && (m.type === "venta" || m.type === "retirada"));
-    if (fueVendidoORetirado) realizada += -aportado;
+    if (fueVendidoORetirado) bloque.realizada += -aportado;
   }
 
+  return bloques;
+}
+
+export function plusvaliaRealizadaVsLatente() {
+  const bloques = Object.values(plusvaliaRealizadaVsLatentePorBloque());
+  const latente = bloques.reduce((s, b) => s + b.latente, 0);
+  const realizada = bloques.reduce((s, b) => s + b.realizada, 0);
   return { realizada, latente, total: realizada + latente };
 }
 

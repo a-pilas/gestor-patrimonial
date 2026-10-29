@@ -22,7 +22,7 @@ import {
   patrimonioConsolidado,
   evolucionAnualPatrimonio,
   bandasDeRiesgo,
-  plusvaliaRealizadaVsLatente,
+  plusvaliaRealizadaVsLatentePorBloque,
   evolucionMensualLiquidez,
   evolucionMensualConsolidada,
   estadoRevisionXray,
@@ -39,6 +39,7 @@ const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "s
 
 let showTwrDetail = false;
 let showYtdNotas = false;
+let showResumenNota = false;
 
 // Paleta validada (validate_palette.js, modo dark, superficie --bg-card
 // #17281f): las 5 comprobaciones (banda de luminosidad, croma, separación
@@ -486,14 +487,27 @@ function wireYtdChart(container) {
 // cualquiera de las dos puede ser negativa (una pérdida), y una barra
 // apilada solo tiene sentido con magnitudes positivas.
 function plusvaliaCard() {
-  const { realizada, latente, total } = plusvaliaRealizadaVsLatente();
+  const bloques = plusvaliaRealizadaVsLatentePorBloque();
+  const filas = [
+    ["Plusvalías financieras", bloques.financiera],
+    ["Plusvalías inmobiliarias (sin vivienda habitual)", bloques.inmobiliaria],
+    ["Vivienda habitual", bloques.viviendaHabitual],
+  ];
+  const suma = (campo) => filas.reduce((s, [, b]) => s + b[campo], 0);
+  const celda = (n) => `<td class="${n >= 0 ? "pos" : "neg"}">${fmtEUR(n)}</td>`;
   return `
     <section class="card">
       <h3>Plusvalía realizada vs. latente</h3>
-      <p class="muted">Incluye inversiones financieras e inmuebles; no incluye cuentas corrientes, remuneradas ni depósitos. Realizada: activos ya vendidos o retirados por completo. Latente: lo que sigues manteniendo. Un activo recién dado de alta sin posición ni venta registrada todavía no cuenta en ninguna de las dos.</p>
-      <div class="kpi-row"><span>Latente</span><strong class="${latente >= 0 ? "pos" : "neg"}">${fmtEUR(latente)}</strong></div>
-      <div class="kpi-row"><span>Realizada</span><strong class="${realizada >= 0 ? "pos" : "neg"}">${fmtEUR(realizada)}</strong></div>
-      <div class="kpi-row"><span>Total</span><strong class="${total >= 0 ? "pos" : "neg"}">${fmtEUR(total)}</strong></div>
+      <p class="muted">No incluye cuentas corrientes, remuneradas ni depósitos. Realizada: activos ya vendidos o retirados por completo. Latente: lo que sigues manteniendo. Un activo recién dado de alta sin posición ni venta registrada todavía no cuenta en ninguna de las dos.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th></th><th>Latente</th><th>Realizada</th><th>Total</th></tr></thead>
+          <tbody>
+            ${filas.map(([nombre, b]) => `<tr><td>${nombre}</td>${celda(b.latente)}${celda(b.realizada)}${celda(b.latente + b.realizada)}</tr>`).join("")}
+          </tbody>
+          <tfoot><tr><td><strong>Total</strong></td>${celda(suma("latente"))}${celda(suma("realizada"))}${celda(suma("latente") + suma("realizada"))}</tr></tfoot>
+        </table>
+      </div>
     </section>
   `;
 }
@@ -703,7 +717,12 @@ export function renderDashboard(container) {
         <div class="kpi-row"><span>Inmuebles</span><strong>${fmtEUR(inversiones.valorInmuebles)}</strong></div>
         <div class="kpi-row"><span>Aportado neto</span><strong>${fmtEUR(inversiones.aportado)}</strong></div>
         <div class="kpi-row"><span>Plusvalía acumulada</span><strong class="${inversiones.plusvalia >= 0 ? "pos" : "neg"}">${missingInversion.length ? "—" : `${fmtEUR(inversiones.plusvalia)}${inversiones.pct != null ? ` (${fmtPct(inversiones.pct)})` : ""}`}</strong></div>
-        <p class="muted">Aportado y plusvalía se calculan sobre inversiones e inmuebles, sin cuentas corrientes, remuneradas ni depósitos: su saldo cambia por gastos, nóminas y vencimientos que casi nunca se registran como movimientos y daba pérdidas ficticias.</p>
+        <button type="button" id="btn-toggle-resumen-nota" class="link-btn">${showResumenNota ? "Ocultar explicación" : "Ver explicación"}</button>
+        ${
+          showResumenNota
+            ? `<p class="muted">Aportado y plusvalía se calculan sobre inversiones e inmuebles, sin cuentas corrientes, remuneradas ni depósitos: su saldo cambia por gastos, nóminas y vencimientos que casi nunca se registran como movimientos y daba pérdidas ficticias.</p>`
+            : ""
+        }
         ${missingInversion.length ? `<p class="muted">No se calcula hasta que todas las inversiones e inmuebles tengan una posición con su valor actual.</p>` : ""}
         ${
           deuda
@@ -780,6 +799,11 @@ export function renderDashboard(container) {
   `;
 
   wireYtdChart(container);
+
+  container.querySelector("#btn-toggle-resumen-nota")?.addEventListener("click", () => {
+    showResumenNota = !showResumenNota;
+    renderDashboard(container);
+  });
 
   container.querySelector("#btn-toggle-ytd-notas")?.addEventListener("click", () => {
     showYtdNotas = !showYtdNotas;

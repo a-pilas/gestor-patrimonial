@@ -154,7 +154,7 @@ export function uid() {
 export function emptyData() {
   return {
     meta: {
-      benchmarkName: "Morningstar Global 60/40",
+      benchmarkName: "Morningstar Global 70/30",
       benchmarkYtdPct: null,
       realEstateSafetyPct: DEFAULT_REAL_ESTATE_SAFETY_PCT,
       tramosAhorro: DEFAULT_TRAMOS_AHORRO,
