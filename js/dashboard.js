@@ -704,7 +704,7 @@ export function renderDashboard(container) {
     : "";
 
   container.innerHTML = `
-    <div class="print-only print-header">Gestor Patrimonial — Indicadores · ${fechaLocalIso()}</div>
+    <div class="print-only print-header"><span class="print-header-title">Gestor Patrimonial CELIANCA</span><span class="print-header-sub">Informe de situación · ${fechaLocalIso()}</span></div>
     <div class="dash-actions no-print">
       <button type="button" id="btn-export-pdf" class="link-btn" title="Se abre la ventana de impresión: elige «Guardar como PDF» como destino">Descargar PDF de esta pantalla</button>
     </div>
@@ -740,7 +740,7 @@ export function renderDashboard(container) {
       </section>
 
       <section class="card card-ytd">
-        <h3>Rentabilidad YTD — Inversión financiera</h3>
+        <h3>Rentabilidad YTD — año en curso</h3>
         <div class="ytd-compare">
           <div class="ytd-box">
             <span class="ytd-label">Inversión financiera</span>
@@ -821,7 +821,7 @@ export function renderDashboard(container) {
   // documento da el nombre por defecto al archivo.
   container.querySelector("#btn-export-pdf")?.addEventListener("click", () => {
     const tituloOriginal = document.title;
-    document.title = `${fechaLocalIso()}-Gestor-Patrimonial-indicadores`;
+    document.title = `${fechaLocalIso()}-Gestor-Patrimonial-CELIANCA-informe-situación`;
     window.addEventListener("afterprint", () => (document.title = tituloOriginal), { once: true });
     window.print();
   });

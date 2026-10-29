@@ -369,11 +369,14 @@ dialog.app-modal::backdrop { background: rgba(0, 0, 0, 0.55); }
   body { padding-bottom: 0; background: #fff; }
   .topbar, .tabbar, .no-print, .link-btn, .evo-tooltip { display: none !important; }
   .print-only { display: block; }
-  .print-header { font-size: 1.1rem; font-weight: 700; margin-bottom: 10px; }
+  .print-header { margin-bottom: 8px; }
+  .print-header-title { display: block; font-size: 1.7rem; font-weight: 700; line-height: 1.2; }
+  .print-header-sub { display: block; font-size: 0.95rem; color: var(--muted); }
   .content { max-width: none; padding: 0; }
   .card { break-inside: avoid; page-break-inside: avoid; }
   .card-warning { background: #fff8e6; }
-  .dash-grid { grid-template-columns: 1fr 1fr; }
+  .dash-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .dash-grid > .card { margin-bottom: 0; }
   .ytd-compare { gap: 10px; }
   .ytd-value { font-size: 1.05rem; white-space: nowrap; }
   .ytd-label { font-size: 0.75rem; }
