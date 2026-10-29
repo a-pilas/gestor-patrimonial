@@ -67,6 +67,61 @@ function exportarResumenExcel(rows, entityName) {
   URL.revokeObjectURL(url);
 }
 
+// Filas del Resumen por activo, ordenadas por entidad y nombre. Las usan la
+// pestaña Posiciones y la tabla final del PDF de Inicio.
+function filasResumenActivos(data) {
+  const entityName = (id) => data.entities.find((e) => e.id === id)?.name || "—";
+  const ultimas = latestPositionsByAssetEntity();
+  return data.assets
+    .map((a) => {
+      const latest = ultimas.find((p) => p.assetId === a.id);
+      const valorActual = latest ? valueOfPosition(latest) : null;
+      // Cuentas corrientes/remuneradas: sin aportado, plusvalía ni variación.
+      const sinRentabilidad = SUBCLASSES_SIN_RENTABILIDAD.includes(a.subclass);
+      const aportado = sinRentabilidad ? null : aportadoNetoPorActivo(a.id);
+      const plusvalia = valorActual != null && aportado != null ? valorActual - aportado : null;
+      // No se muestra en la tabla en pantalla, pero sí se incluye en la
+      // exportación a Excel (columna "Fecha actualización").
+      const fechaActualizacion = latest ? latest.date : null;
+      return { asset: a, valorActual, aportado, plusvalia, fechaActualizacion, sinRentabilidad };
+    })
+    .sort((a, b) => {
+      const entityCmp = entityName(a.asset.entityId).localeCompare(entityName(b.asset.entityId), "es");
+      if (entityCmp !== 0) return entityCmp;
+      return a.asset.name.localeCompare(b.asset.name, "es");
+    });
+}
+
+// Tabla limpia para la última página del PDF de Inicio (solo se ve al
+// imprimir): activos con posición actual distinta de cero, sin filtros ni botones.
+export function resumenActivosImprimibleHtml() {
+  const data = store.get();
+  const entityName = (id) => data.entities.find((e) => e.id === id)?.name || "—";
+  const rows = filasResumenActivos(data).filter((r) => r.valorActual != null && r.valorActual > 0);
+  return `
+    <section class="print-only print-resumen">
+      <h3>Resumen por activo · ${new Date().toLocaleDateString("es-ES")}</h3>
+      <table class="table">
+        <thead><tr><th>Activo</th><th>Entidad</th><th>Aportado</th><th>Valor actual</th><th>Plusvalía</th><th>Variación</th></tr></thead>
+        <tbody>
+          ${rows
+            .map(
+              (r) => `<tr>
+                <td>${r.asset.name}</td>
+                <td>${entityName(r.asset.entityId)}</td>
+                <td>${r.aportado != null ? fmtEUR(r.aportado) : ""}</td>
+                <td>${fmtEUR(r.valorActual)}</td>
+                <td class="${r.plusvalia >= 0 ? "pos" : "neg"}">${r.plusvalia != null ? fmtEUR(r.plusvalia) : ""}</td>
+                <td class="${r.plusvalia >= 0 ? "pos" : "neg"}">${r.sinRentabilidad ? "" : fmtVariacion(variacionPct(r.plusvalia, r.aportado))}</td>
+              </tr>`
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </section>
+  `;
+}
+
 export function renderPositions(container) {
   const data = store.get();
 
@@ -87,24 +142,7 @@ export function renderPositions(container) {
 
   const sorted = [...data.positions].sort((a, b) => (a.date < b.date ? 1 : -1));
 
-  const resumenRowsAll = data.assets
-    .map((a) => {
-      const latest = latestPositionsByAssetEntity().find((p) => p.assetId === a.id);
-      const valorActual = latest ? valueOfPosition(latest) : null;
-      // Cuentas corrientes/remuneradas: sin aportado, plusvalía ni variación.
-      const sinRentabilidad = SUBCLASSES_SIN_RENTABILIDAD.includes(a.subclass);
-      const aportado = sinRentabilidad ? null : aportadoNetoPorActivo(a.id);
-      const plusvalia = valorActual != null && aportado != null ? valorActual - aportado : null;
-      // No se muestra en la tabla en pantalla, pero sí se incluye en la
-      // exportación a Excel (columna "Fecha actualización").
-      const fechaActualizacion = latest ? latest.date : null;
-      return { asset: a, valorActual, aportado, plusvalia, fechaActualizacion, sinRentabilidad };
-    })
-    .sort((a, b) => {
-      const entityCmp = entityName(a.asset.entityId).localeCompare(entityName(b.asset.entityId), "es");
-      if (entityCmp !== 0) return entityCmp;
-      return a.asset.name.localeCompare(b.asset.name, "es");
-    });
+  const resumenRowsAll = filasResumenActivos(data);
 
   // Un activo con valor actual a 0€ significa que se traspasó/vendió del
   // todo (ver invariante Posiciones vs. Movimientos): se sigue conservando

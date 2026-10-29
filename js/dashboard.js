@@ -27,6 +27,13 @@ import {
   evolucionMensualConsolidada,
   estadoRevisionXray,
 } from "./metrics.js";
+import { resumenActivosImprimibleHtml } from "./positions.js";
+
+// AAAA-MM-DD en hora local (toISOString() daría la fecha UTC, que de noche puede ser otro día).
+function fechaLocalIso() {
+  const hoy = new Date();
+  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+}
 
 const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
@@ -483,7 +490,7 @@ function plusvaliaCard() {
   return `
     <section class="card">
       <h3>Plusvalía realizada vs. latente</h3>
-      <p class="muted">Realizada: activos ya vendidos o retirados por completo. Latente: lo que sigues manteniendo. Un activo recién dado de alta sin posición ni venta registrada todavía no cuenta en ninguna de las dos.</p>
+      <p class="muted">Incluye inversiones financieras e inmuebles; no incluye cuentas corrientes, remuneradas ni depósitos. Realizada: activos ya vendidos o retirados por completo. Latente: lo que sigues manteniendo. Un activo recién dado de alta sin posición ni venta registrada todavía no cuenta en ninguna de las dos.</p>
       <div class="kpi-row"><span>Latente</span><strong class="${latente >= 0 ? "pos" : "neg"}">${fmtEUR(latente)}</strong></div>
       <div class="kpi-row"><span>Realizada</span><strong class="${realizada >= 0 ? "pos" : "neg"}">${fmtEUR(realizada)}</strong></div>
       <div class="kpi-row"><span>Total</span><strong class="${total >= 0 ? "pos" : "neg"}">${fmtEUR(total)}</strong></div>
@@ -543,7 +550,7 @@ function financialByEntityTable() {
   return `
     <section class="card">
       <h3>Patrimonio financiero por entidad</h3>
-      <p class="muted">Excluye inmobiliario, ordenado de mayor a menor.</p>
+      <p class="muted">Ordenado de mayor a menor, excluye inmobiliario.</p>
       <div class="table-wrap">
         <table class="table">
           <thead><tr><th>Entidad</th><th>Importe</th><th>%</th></tr></thead>
@@ -666,7 +673,7 @@ export function renderDashboard(container) {
 
   const revisionXray = estadoRevisionXray();
   const xrayBanner = revisionXray.toca
-    ? `<section class="card card-warning">
+    ? `<section class="card card-warning no-print">
         <strong>Toca revisar el X-Ray</strong>
         <p class="muted">${
           revisionXray.ultima
@@ -677,7 +684,7 @@ export function renderDashboard(container) {
     : "";
 
   container.innerHTML = `
-    <div class="print-only print-header">Gestor patrimonial — Inicio · ${new Date().toLocaleDateString("es-ES")}</div>
+    <div class="print-only print-header">Gestor Patrimonial — Indicadores · ${fechaLocalIso()}</div>
     <div class="dash-actions no-print">
       <button type="button" id="btn-export-pdf" class="link-btn" title="Se abre la ventana de impresión: elige «Guardar como PDF» como destino">Descargar PDF de esta pantalla</button>
     </div>
@@ -768,6 +775,8 @@ export function renderDashboard(container) {
     ${plusvaliaCard()}
 
     ${financialByEntityTable()}
+
+    ${resumenActivosImprimibleHtml()}
   `;
 
   wireYtdChart(container);
@@ -782,7 +791,7 @@ export function renderDashboard(container) {
   // documento da el nombre por defecto al archivo.
   container.querySelector("#btn-export-pdf")?.addEventListener("click", () => {
     const tituloOriginal = document.title;
-    document.title = `Gestor patrimonial - Inicio ${new Date().toISOString().slice(0, 10)}`;
+    document.title = `${fechaLocalIso()}-Gestor-Patrimonial-indicadores`;
     window.addEventListener("afterprint", () => (document.title = tituloOriginal), { once: true });
     window.print();
   });

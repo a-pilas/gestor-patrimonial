@@ -138,7 +138,7 @@ export function renderFiscal(container) {
 
     <section class="card">
       <h3>¿Y si vendo todo hoy?</h3>
-      <p class="muted">Coste fiscal incremental de materializar hoy toda tu plusvalía latente (todo lo que sigues manteniendo), sumada a lo ya realizado en ${currentYear} — no aislada, porque los tramos son progresivos y lo que ya llevas realizado este año condiciona el tramo en el que caería esa nueva ganancia.</p>
+      <p class="muted">Coste fiscal incremental de materializar hoy toda tu plusvalía latente (inversiones e inmuebles que sigues manteniendo; sin cuentas corrientes, remuneradas ni depósitos), sumada a lo ya realizado en ${currentYear} — no aislada, porque los tramos son progresivos y lo que ya llevas realizado este año condiciona el tramo en el que caería esa nueva ganancia.</p>
       <div class="kpi-row"><span>Plusvalía latente total (si se vendiera todo)</span><span class="${simulacion.latente >= 0 ? "pos" : "neg"}">${fmtEUR(simulacion.latente)}</span></div>
       <div class="kpi-row"><span>Ya realizado en ${currentYear} (ganancias + dividendos)</span><span>${fmtEUR(simulacion.yaRealizadoEsteAño)}</span></div>
       <div class="kpi-row"><span>Cuota ya debida por lo realizado</span><span>${fmtEUR(simulacion.cuotaYaDebida)}</span></div>

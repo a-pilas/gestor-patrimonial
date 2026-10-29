@@ -599,6 +599,11 @@ export function plusvaliaRealizadaVsLatente() {
   let realizada = 0;
 
   for (const asset of data.assets) {
+    // Sin liquidez operativa (cuentas corrientes, remuneradas, depósitos): su
+    // saldo sube y baja por movimientos que no se registran, y un depósito
+    // vencido seguía contando como aportado. Mismo criterio que la plusvalía
+    // acumulada de Inicio.
+    if (LIQUIDEZ_OPERATIVA_SUBCLASSES.includes(asset.subclass)) continue;
     const aportado = aportadoNetoPorActivo(asset.id);
     const latest = latestByAsset.get(asset.id);
     if (latest) {

@@ -374,8 +374,14 @@ dialog.app-modal::backdrop { background: rgba(0, 0, 0, 0.55); }
   .card { break-inside: avoid; page-break-inside: avoid; }
   .card-warning { background: #fff8e6; }
   .dash-grid { grid-template-columns: 1fr 1fr; }
-  .card-ytd { grid-column: 1 / -1; }
-  .ytd-value { white-space: nowrap; }
+  .ytd-compare { gap: 10px; }
+  .ytd-value { font-size: 1.05rem; white-space: nowrap; }
+  .ytd-label { font-size: 0.75rem; }
+  .ytd-eur { font-size: 0.85rem; }
+  .print-resumen { break-before: page; page-break-before: always; }
+  .print-resumen .table { font-size: 0.78rem; }
+  .print-resumen thead { display: table-header-group; }
+  .print-resumen tr { break-inside: avoid; page-break-inside: avoid; }
   .stackbar, .risk-track { background: #e3e9e6; }
   .donut circle[stroke="#2a2a2a"] { stroke: #e3e9e6; }
   .table-wrap, .evo-chart { overflow: visible; }
