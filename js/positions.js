@@ -1,7 +1,7 @@
 import { UNIT_TRADED_SUBCLASSES, REAL_ESTATE_SUBCLASSES } from "./model.js";
 import { store, latestPositionsByAssetEntity, latestLiabilityPositions } from "./store.js";
 import { aportadoNetoPorActivo, valueOfPosition } from "./metrics.js";
-import { SUBCLASSES_SIN_RENTABILIDAD } from "./model.js";
+import { SUBCLASSES_SIN_RENTABILIDAD, LIQUIDEZ_OPERATIVA_SUBCLASSES } from "./model.js";
 import { openModal } from "./modal.js";
 
 let bulkMode = false;
@@ -67,6 +67,30 @@ function exportarResumenExcel(rows, entityName) {
   URL.revokeObjectURL(url);
 }
 
+// Totales del Resumen por activo. El Valor suma las filas mostradas; Aportado,
+// Plusvalía y Variación siguen el criterio de Inicio: sin cuentas corrientes,
+// remuneradas ni depósitos, y contando también los activos a cero (su coste
+// aportado se traspasó a otro activo y, si se omitiera, el total quedaría
+// descuadrado). `todas` = filas del segmento; `mostradas` = las que se ven.
+function totalesResumen(todas, mostradas) {
+  const base = todas.filter(
+    (r) => r.valorActual != null && r.aportado != null && !LIQUIDEZ_OPERATIVA_SUBCLASSES.includes(r.asset.subclass)
+  );
+  const aportado = base.reduce((s, r) => s + r.aportado, 0);
+  const plusvalia = base.reduce((s, r) => s + r.plusvalia, 0);
+  const aportadoOcultas = base.filter((r) => !mostradas.includes(r)).reduce((s, r) => s + r.aportado, 0);
+  const valor = mostradas.reduce((s, r) => s + (r.valorActual || 0), 0);
+  const hayLiquidez = mostradas.some((r) => LIQUIDEZ_OPERATIVA_SUBCLASSES.includes(r.asset.subclass));
+  return { valor, aportado, plusvalia, pct: variacionPct(plusvalia, aportado), hayBase: base.length > 0, aportadoOcultas, hayLiquidez };
+}
+
+function notaTotalesResumen(t) {
+  const partes = [];
+  if (t.hayLiquidez) partes.push("no incluyen cuentas corrientes, remuneradas ni depósitos");
+  if (Math.abs(t.aportadoOcultas) >= 0.5) partes.push(`sí incluyen el coste aportado de activos a cero (${fmtEUR(t.aportadoOcultas)}, traspasado a otros activos)`);
+  return partes.length ? `Aportado, Plusvalía y Variación del total ${partes.join(" y ")}.` : "";
+}
+
 // Filas del Resumen por activo, ordenadas por entidad y nombre. Las usan la
 // pestaña Posiciones y la tabla final del PDF de Inicio.
 function filasResumenActivos(data) {
@@ -97,7 +121,10 @@ function filasResumenActivos(data) {
 export function resumenActivosImprimibleHtml() {
   const data = store.get();
   const entityName = (id) => data.entities.find((e) => e.id === id)?.name || "—";
-  const rows = filasResumenActivos(data).filter((r) => r.valorActual != null && r.valorActual > 0);
+  const todas = filasResumenActivos(data);
+  const rows = todas.filter((r) => r.valorActual != null && r.valorActual > 0);
+  const t = totalesResumen(todas, rows);
+  const nota = notaTotalesResumen(t);
   return `
     <section class="print-only print-resumen">
       <h3>Resumen por activo · ${new Date().toLocaleDateString("es-ES")}</h3>
@@ -117,7 +144,15 @@ export function resumenActivosImprimibleHtml() {
             )
             .join("")}
         </tbody>
+        <tfoot><tr>
+          <td colspan="2"><strong>Total (${rows.length})</strong></td>
+          <td><strong>${fmtEUR(t.aportado)}</strong></td>
+          <td><strong>${fmtEUR(t.valor)}</strong></td>
+          <td class="${t.plusvalia >= 0 ? "pos" : "neg"}"><strong>${fmtEUR(t.plusvalia)}</strong></td>
+          <td class="${t.plusvalia >= 0 ? "pos" : "neg"}"><strong>${fmtVariacion(t.pct)}</strong></td>
+        </tr></tfoot>
       </table>
+      ${nota ? `<p class="muted">${nota}</p>` : ""}
     </section>
   `;
 }
@@ -162,12 +197,8 @@ export function renderPositions(container) {
   const resumenRowsZero = resumenSegmento.filter((r) => r.valorActual != null && r.valorActual <= 0);
   const resumenRows = showZeroPositions ? resumenSegmento : resumenSegmento.filter((r) => r.valorActual == null || r.valorActual > 0);
   const hayFiltros = resumenEntityFilter !== "todas" || resumenTypeFilter.size > 0;
-  const segmentoConCuentas = resumenRows.some((r) => r.sinRentabilidad);
-  const segmentoSoloCuentas = resumenRows.length > 0 && resumenRows.every((r) => r.sinRentabilidad);
-  const totalSegmento = resumenRows.reduce(
-    (t, r) => ({ aportado: t.aportado + (r.aportado || 0), valor: t.valor + (r.valorActual || 0), plusvalia: t.plusvalia + (r.plusvalia || 0) }),
-    { aportado: 0, valor: 0, plusvalia: 0 }
-  );
+  const totalSegmento = totalesResumen(resumenSegmento, resumenRows);
+  const notaTotal = notaTotalesResumen(totalSegmento);
 
   const historyYears = [...new Set(data.positions.map((p) => p.date.slice(0, 4)))].sort((a, b) => b.localeCompare(a));
   const filteredSorted = historyYearFilter === "todos" ? sorted : sorted.filter((p) => p.date.slice(0, 4) === historyYearFilter);
@@ -227,23 +258,19 @@ export function renderPositions(container) {
             }
           </tbody>
           ${
-            hayFiltros && resumenRows.length
+            resumenRows.length
               ? `<tfoot><tr>
-                  <td colspan="2"><strong>Total del segmento (${resumenRows.length})</strong></td>
-                  <td><strong>${segmentoSoloCuentas ? "" : fmtEUR(totalSegmento.aportado)}</strong></td>
+                  <td colspan="2"><strong>${hayFiltros ? "Total del segmento" : "Total"} (${resumenRows.length})</strong></td>
+                  <td><strong>${totalSegmento.hayBase ? fmtEUR(totalSegmento.aportado) : ""}</strong></td>
                   <td><strong>${fmtEUR(totalSegmento.valor)}</strong></td>
-                  <td class="${totalSegmento.plusvalia >= 0 ? "pos" : "neg"}"><strong>${segmentoSoloCuentas ? "" : fmtEUR(totalSegmento.plusvalia)}</strong></td>
-                  <td class="${totalSegmento.plusvalia >= 0 ? "pos" : "neg"}"><strong>${segmentoSoloCuentas ? "" : fmtVariacion(variacionPct(totalSegmento.plusvalia, totalSegmento.aportado))}</strong></td>
+                  <td class="${totalSegmento.plusvalia >= 0 ? "pos" : "neg"}"><strong>${totalSegmento.hayBase ? fmtEUR(totalSegmento.plusvalia) : ""}</strong></td>
+                  <td class="${totalSegmento.plusvalia >= 0 ? "pos" : "neg"}"><strong>${totalSegmento.hayBase ? fmtVariacion(totalSegmento.pct) : ""}</strong></td>
                 </tr></tfoot>`
               : ""
           }
         </table>
       </div>
-      ${
-        hayFiltros && segmentoConCuentas && !segmentoSoloCuentas
-          ? `<p class="muted">Las cuentas corrientes y remuneradas suman en el Valor del total, pero no en Aportado, Plusvalía ni Variación (su saldo no tiene rentabilidad).</p>`
-          : ""
-      }
+      ${notaTotal ? `<p class="muted">${notaTotal}</p>` : ""}
       ${
         resumenRowsZero.length
           ? `<button type="button" id="btn-toggle-zero" class="link-btn">${showZeroPositions ? "Ocultar posiciones a cero" : `Ver también posiciones a cero (${resumenRowsZero.length})`}</button>`
