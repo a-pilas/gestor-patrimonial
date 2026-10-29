@@ -597,10 +597,11 @@ export function plusvaliaRealizadaVsLatentePorBloque() {
   const latestByAsset = new Map();
   for (const p of latestPositionsByAssetEntity()) latestByAsset.set(p.assetId, p);
 
+  // aportado = coste aportado de los activos que sigues manteniendo (base del %).
   const bloques = {
-    financiera: { latente: 0, realizada: 0 },
-    inmobiliaria: { latente: 0, realizada: 0 },
-    viviendaHabitual: { latente: 0, realizada: 0 },
+    financiera: { latente: 0, realizada: 0, aportado: 0 },
+    inmobiliaria: { latente: 0, realizada: 0, aportado: 0 },
+    viviendaHabitual: { latente: 0, realizada: 0, aportado: 0 },
   };
 
   for (const asset of data.assets) {
@@ -614,6 +615,7 @@ export function plusvaliaRealizadaVsLatentePorBloque() {
     const latest = latestByAsset.get(asset.id);
     if (latest) {
       bloque.latente += valueOfPosition(latest) - aportado;
+      bloque.aportado += aportado;
       continue;
     }
     const fueVendidoORetirado = data.movements.some((m) => m.assetId === asset.id && (m.type === "venta" || m.type === "retirada"));

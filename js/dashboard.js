@@ -495,17 +495,23 @@ function plusvaliaCard() {
   ];
   const suma = (campo) => filas.reduce((s, [, b]) => s + b[campo], 0);
   const celda = (n) => `<td class="${n >= 0 ? "pos" : "neg"}">${fmtEUR(n)}</td>`;
+  // % = plusvalía total sobre el coste aportado de lo que mantienes (como «Variación» en Posiciones).
+  const celdaPct = (total, aportado) => {
+    if (!(aportado > 0)) return `<td>—</td>`;
+    const pct = (total / aportado) * 100;
+    return `<td class="${pct >= 0 ? "pos" : "neg"}">${pct >= 0 ? "+" : ""}${pct.toLocaleString("es-ES", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %</td>`;
+  };
   return `
     <section class="card print-compact">
       <h3>Plusvalía realizada vs. latente</h3>
       <p class="muted">Sin cuentas corrientes, remuneradas ni depósitos. Realizada: activos vendidos del todo; latente: lo que mantienes.<span class="no-print"> Un activo recién dado de alta sin posición ni venta registrada no cuenta en ninguna de las dos.</span></p>
       <div class="table-wrap">
         <table class="table">
-          <thead><tr><th></th><th>Latente</th><th>Realizada</th><th>Total</th></tr></thead>
+          <thead><tr><th></th><th>Latente</th><th>Realizada</th><th>Total</th><th title="Plusvalía total sobre el coste aportado de lo que mantienes">%</th></tr></thead>
           <tbody>
-            ${filas.map(([nombre, b]) => `<tr><td>${nombre}</td>${celda(b.latente)}${celda(b.realizada)}${celda(b.latente + b.realizada)}</tr>`).join("")}
+            ${filas.map(([nombre, b]) => `<tr><td>${nombre}</td>${celda(b.latente)}${celda(b.realizada)}${celda(b.latente + b.realizada)}${celdaPct(b.latente + b.realizada, b.aportado)}</tr>`).join("")}
           </tbody>
-          <tfoot><tr><td><strong>Total</strong></td>${celda(suma("latente"))}${celda(suma("realizada"))}${celda(suma("latente") + suma("realizada"))}</tr></tfoot>
+          <tfoot><tr><td><strong>Total</strong></td>${celda(suma("latente"))}${celda(suma("realizada"))}${celda(suma("latente") + suma("realizada"))}${celdaPct(suma("latente") + suma("realizada"), suma("aportado"))}</tr></tfoot>
         </table>
       </div>
     </section>
