@@ -386,8 +386,7 @@ dialog.app-modal::backdrop { background: rgba(0, 0, 0, 0.55); }
   .print-compact .table { font-size: 0.78rem; }
   .print-compact .table th, .print-compact .table td { padding: 3px 6px; }
   .print-compact .kpi-row { padding: 3px 0; }
-  .print-compact .evo-chart { height: 110px; padding-top: 24px; gap: 6px; }
-  .print-compact .evo-bar-year { margin-top: 3px; }
+  .print-compact .evo-chart { height: 210px; padding-top: 30px; gap: 8px; }
   /* Tabla final por activo: una hoja, texto pequeño pero legible */
   .print-resumen { break-before: page; page-break-before: always; }
   .print-resumen h3 { font-size: 1rem; margin: 0 0 6px; }
