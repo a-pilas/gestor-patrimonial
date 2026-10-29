@@ -6,6 +6,7 @@ import { openModal } from "./modal.js";
 
 let bulkMode = false;
 let showZeroPositions = false;
+let showNotaTotal = false;
 let historyYearFilter = "todos";
 let resumenEntityFilter = "todas";
 // Tipos de inversión seleccionados en el Resumen (vacío = todos). Se usa la
@@ -124,7 +125,6 @@ export function resumenActivosImprimibleHtml() {
   const todas = filasResumenActivos(data);
   const rows = todas.filter((r) => r.valorActual != null && r.valorActual > 0);
   const t = totalesResumen(todas, rows);
-  const nota = notaTotalesResumen(t);
   return `
     <section class="print-only print-resumen">
       <h3>Resumen por activo · ${new Date().toLocaleDateString("es-ES")}</h3>
@@ -152,7 +152,6 @@ export function resumenActivosImprimibleHtml() {
           <td class="${t.plusvalia >= 0 ? "pos" : "neg"}"><strong>${fmtVariacion(t.pct)}</strong></td>
         </tr></tfoot>
       </table>
-      ${nota ? `<p class="muted">${nota}</p>` : ""}
     </section>
   `;
 }
@@ -270,7 +269,12 @@ export function renderPositions(container) {
           }
         </table>
       </div>
-      ${notaTotal ? `<p class="muted">${notaTotal}</p>` : ""}
+      ${
+        notaTotal
+          ? `<div><button type="button" id="btn-toggle-nota-total" class="link-btn">${showNotaTotal ? "Ocultar explicación del total" : "Ver explicación del total"}</button></div>
+             ${showNotaTotal ? `<p class="muted">${notaTotal}</p>` : ""}`
+          : ""
+      }
       ${
         resumenRowsZero.length
           ? `<button type="button" id="btn-toggle-zero" class="link-btn">${showZeroPositions ? "Ocultar posiciones a cero" : `Ver también posiciones a cero (${resumenRowsZero.length})`}</button>`
@@ -489,6 +493,11 @@ export function renderPositions(container) {
 
   container.querySelector("#btn-export-resumen").addEventListener("click", () => {
     exportarResumenExcel(resumenRows, entityName);
+  });
+
+  container.querySelector("#btn-toggle-nota-total")?.addEventListener("click", () => {
+    showNotaTotal = !showNotaTotal;
+    renderPositions(container);
   });
 
   container.querySelector("#btn-toggle-zero")?.addEventListener("click", () => {
