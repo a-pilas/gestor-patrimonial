@@ -82,14 +82,18 @@ export function totalAportadoNeto() {
 export function plusvaliaAcumuladaInversiones() {
   const data = store.get();
   const esLiquidez = (a) => LIQUIDEZ_OPERATIVA_SUBCLASSES.includes(a.subclass);
-  let valor = 0;
+  let valorInversiones = 0;
+  let valorInmuebles = 0;
   for (const p of latestPositionsByAssetEntity()) {
     const asset = assetById(p.assetId);
-    if (asset && !esLiquidez(asset)) valor += valueOfPosition(p);
+    if (!asset || esLiquidez(asset)) continue;
+    if (asset.class === "inmobiliario") valorInmuebles += valueOfPosition(p);
+    else valorInversiones += valueOfPosition(p);
   }
+  const valor = valorInversiones + valorInmuebles;
   let aportado = 0;
   for (const a of data.assets) if (!esLiquidez(a)) aportado += aportadoNetoPorActivo(a.id);
-  return { valor, aportado, plusvalia: valor - aportado, pct: aportado > 0 ? ((valor - aportado) / aportado) * 100 : null };
+  return { valor, valorInversiones, valorInmuebles, aportado, plusvalia: valor - aportado, pct: aportado > 0 ? ((valor - aportado) / aportado) * 100 : null };
 }
 
 // Valor total (financiero + inmobiliario) en o antes de una fecha de corte

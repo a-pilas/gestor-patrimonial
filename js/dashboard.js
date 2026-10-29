@@ -687,7 +687,8 @@ export function renderDashboard(container) {
       <section class="card card-summary">
         <h3>Resumen</h3>
         <div class="kpi-row"><span>Patrimonio total</span><strong>${fmtEUR(total)}</strong></div>
-        <div class="kpi-row"><span>Inversiones e inmuebles</span><strong>${fmtEUR(inversiones.valor)}</strong></div>
+        <div class="kpi-row"><span>Inversiones</span><strong>${fmtEUR(inversiones.valorInversiones)}</strong></div>
+        <div class="kpi-row"><span>Inmuebles</span><strong>${fmtEUR(inversiones.valorInmuebles)}</strong></div>
         <div class="kpi-row"><span>Aportado neto</span><strong>${fmtEUR(inversiones.aportado)}</strong></div>
         <div class="kpi-row"><span>Plusvalía acumulada</span><strong class="${inversiones.plusvalia >= 0 ? "pos" : "neg"}">${missingInversion.length ? "—" : `${fmtEUR(inversiones.plusvalia)}${inversiones.pct != null ? ` (${fmtPct(inversiones.pct)})` : ""}`}</strong></div>
         <p class="muted">Aportado y plusvalía se calculan sobre inversiones e inmuebles, sin cuentas corrientes, remuneradas ni depósitos: su saldo cambia por gastos, nóminas y vencimientos que casi nunca se registran como movimientos y daba pérdidas ficticias.</p>
