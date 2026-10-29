@@ -620,7 +620,7 @@ function rvRfCard() {
   return `
     <section class="card">
       <h3>Renta variable / Renta fija</h3>
-      <p class="muted">Sobre tu inversión financiera, sin cuentas, ahorro ni depósitos y sin inmuebles. Los fondos Mixtos se reparten según su "% en RV" de Activos.</p>
+      <p class="muted">Sobre tu inversión financiera, sin cuentas, ahorro ni depósitos y sin inmuebles.</p>
       <div class="stackbar-total">${fmtEUR(a.total)}</div>
       <div class="stackbar" role="img" aria-label="${filas.map((f) => `${f.label} ${fmtPct1(f.pct)}`).join(", ")}">
         ${filas.map((f) => `<div class="stackbar-seg" style="width:${f.pct}%; background:${f.color}"></div>`).join("")}
