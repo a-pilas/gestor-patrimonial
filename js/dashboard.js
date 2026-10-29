@@ -31,6 +31,7 @@ import {
 const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
 let showTwrDetail = false;
+let showYtdNotas = false;
 
 // Paleta validada (validate_palette.js, modo dark, superficie --bg-card
 // #17281f): las 5 comprobaciones (banda de luminosidad, croma, separación
@@ -676,6 +677,10 @@ export function renderDashboard(container) {
     : "";
 
   container.innerHTML = `
+    <div class="print-only print-header">Gestor patrimonial — Inicio · ${new Date().toLocaleDateString("es-ES")}</div>
+    <div class="dash-actions no-print">
+      <button type="button" id="btn-export-pdf" class="link-btn" title="Se abre la ventana de impresión: elige «Guardar como PDF» como destino">Descargar PDF de esta pantalla</button>
+    </div>
     ${missingBanner}
     ${xrayBanner}
     <div class="dash-grid">
@@ -704,7 +709,6 @@ export function renderDashboard(container) {
 
       <section class="card card-ytd">
         <h3>Rentabilidad YTD — Inversión financiera</h3>
-        <p class="muted">Ganancia del año (valor actual − valor a 31/12 − aportaciones netas + dividendos y cupones cobrados) dividida entre el capital medio invertido, contando cada aportación solo por los días que ha estado dentro (Dietz modificado). Así las aportaciones no inflan la rentabilidad y las actualizaciones de posiciones a medias no la distorsionan. Excluye cuentas corrientes e inmobiliario — la liquidez operativa no tiene "rentabilidad" y mezclarla distorsiona el cálculo.</p>
         <div class="ytd-compare">
           <div class="ytd-box">
             <span class="ytd-label">Inversión financiera</span>
@@ -722,8 +726,16 @@ export function renderDashboard(container) {
             <span class="ytd-eur ${revalInmobiliario.ganancia >= 0 ? "pos" : "neg"}">${fmtEURSigned(revalInmobiliario.ganancia)}</span>
           </div>
         </div>
-        <p class="muted">En euros: lo que ha subido o bajado de valor este año sin contar el dinero que has metido o sacado (valor actual − valor a 31/12 − aportaciones netas del año). Si falta registrar algún movimiento, esta cifra sale distorsionada.</p>
-        <button type="button" id="btn-toggle-twr-detail" class="link-btn">${showTwrDetail ? "Ocultar detalle del cálculo" : "Ver detalle del cálculo"}</button>
+        <div class="ytd-links">
+          <button type="button" id="btn-toggle-ytd-notas" class="link-btn">${showYtdNotas ? "Ocultar explicación" : "Ver explicación"}</button>
+          <button type="button" id="btn-toggle-twr-detail" class="link-btn">${showTwrDetail ? "Ocultar detalle del cálculo" : "Ver detalle del cálculo"}</button>
+        </div>
+        ${
+          showYtdNotas
+            ? `<p class="muted">Ganancia del año (valor actual − valor a 31/12 − aportaciones netas + dividendos y cupones cobrados) dividida entre el capital medio invertido, contando cada aportación solo por los días que ha estado dentro (Dietz modificado). Así las aportaciones no inflan la rentabilidad y las actualizaciones de posiciones a medias no la distorsionan. Excluye cuentas corrientes e inmobiliario — la liquidez operativa no tiene "rentabilidad" y mezclarla distorsiona el cálculo.</p>
+               <p class="muted">En euros: lo que ha subido o bajado de valor este año sin contar el dinero que has metido o sacado (valor actual − valor a 31/12 − aportaciones netas del año). Si falta registrar algún movimiento, esta cifra sale distorsionada.</p>`
+            : ""
+        }
         ${showTwrDetail ? twrDetailSection() : ""}
       </section>
 
@@ -759,6 +771,21 @@ export function renderDashboard(container) {
   `;
 
   wireYtdChart(container);
+
+  container.querySelector("#btn-toggle-ytd-notas")?.addEventListener("click", () => {
+    showYtdNotas = !showYtdNotas;
+    renderDashboard(container);
+  });
+
+  // El PDF sale de la ventana de impresión del navegador (destino «Guardar como
+  // PDF»), con una hoja de estilos de impresión en tema claro. El título del
+  // documento da el nombre por defecto al archivo.
+  container.querySelector("#btn-export-pdf")?.addEventListener("click", () => {
+    const tituloOriginal = document.title;
+    document.title = `Gestor patrimonial - Inicio ${new Date().toISOString().slice(0, 10)}`;
+    window.addEventListener("afterprint", () => (document.title = tituloOriginal), { once: true });
+    window.print();
+  });
 
   container.querySelector("#btn-toggle-twr-detail")?.addEventListener("click", () => {
     showTwrDetail = !showTwrDetail;

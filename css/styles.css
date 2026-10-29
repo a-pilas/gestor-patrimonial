@@ -351,3 +351,32 @@ dialog.app-modal::backdrop { background: rgba(0, 0, 0, 0.55); }
 }
 .chip-toggle:hover { border-color: var(--brand-light); color: var(--text); }
 .chip-toggle.active { background: var(--brand); border-color: var(--brand-light); color: var(--text); }
+
+.ytd-links { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 4px; }
+.dash-actions { text-align: right; margin-bottom: 8px; }
+.print-only { display: none; }
+
+/* Impresión / PDF: tema claro, sin navegación ni botones, y tarjetas que no se
+   parten entre páginas. */
+@page { size: A4; margin: 12mm; }
+@media print {
+  :root {
+    --bg: #fff; --bg-card: #fff; --bg-card-alt: #f3f6f4; --border: #cbd5cf;
+    --text: #17241d; --muted: #586b61; --accent: #8a6d0f;
+    --pos: #1a7f4b; --neg: #b93a30;
+  }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { padding-bottom: 0; background: #fff; }
+  .topbar, .tabbar, .no-print, .link-btn, .evo-tooltip { display: none !important; }
+  .print-only { display: block; }
+  .print-header { font-size: 1.1rem; font-weight: 700; margin-bottom: 10px; }
+  .content { max-width: none; padding: 0; }
+  .card { break-inside: avoid; page-break-inside: avoid; }
+  .card-warning { background: #fff8e6; }
+  .dash-grid { grid-template-columns: 1fr 1fr; }
+  .card-ytd { grid-column: 1 / -1; }
+  .ytd-value { white-space: nowrap; }
+  .stackbar, .risk-track { background: #e3e9e6; }
+  .donut circle[stroke="#2a2a2a"] { stroke: #e3e9e6; }
+  .table-wrap, .evo-chart { overflow: visible; }
+}
