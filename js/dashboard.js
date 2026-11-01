@@ -697,7 +697,7 @@ export function renderDashboard(container) {
         <strong>Toca revisar el X-Ray</strong>
         <p class="muted">${
           revisionXray.ultima
-            ? `Han pasado ${revisionXray.diasDesde} días desde la última revisión.`
+            ? `Última revisión hace ${revisionXray.diasDesde} días; toca la revisión semestral (junio y diciembre).`
             : "Todavía no lo has revisado nunca."
         } Ve a <a href="#xray">X-Ray</a> para repasar la composición real de tus fondos.</p>
       </section>`

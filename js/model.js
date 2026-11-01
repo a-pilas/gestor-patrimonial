@@ -59,7 +59,11 @@ export const LIQUIDEZ_OPERATIVA_SUBCLASSES = ["Cuenta corriente", "Cuenta remune
 // (Los depósitos a plazo sí: su aportado es fijo y la plusvalía son intereses.)
 export const SUBCLASSES_SIN_RENTABILIDAD = ["Cuenta corriente", "Cuenta remunerada"];
 
-export const DEFAULT_XRAY_REVISION_DIAS_AVISO = 180;
+// Meses (1-12) en los que toca revisar el X-Ray: junio y diciembre. El aviso
+// salta desde el día 1 de cada uno hasta que se marca como revisado.
+export const XRAY_REVISION_MESES = [6, 12];
+// Tolerancia (en puntos porcentuales) al comprobar que un desglose suma 100.
+export const GEO_SUMA_TOLERANCIA = 0.5;
 export const DEFAULT_CONCENTRACION_GEOGRAFICA_UMBRAL_PCT = 40;
 
 // Costes recurrentes estimados por activo financiero (opcional, se rellena
@@ -187,7 +191,6 @@ export function emptyData() {
       compraPropiedadDiferencialPct: null,
       compraPropiedadAniosFijos: null,
       xrayUltimaRevision: null,
-      xrayRevisionDiasAviso: DEFAULT_XRAY_REVISION_DIAS_AVISO,
       concentracionGeograficaUmbralPct: DEFAULT_CONCENTRACION_GEOGRAFICA_UMBRAL_PCT,
       version: 1,
     },

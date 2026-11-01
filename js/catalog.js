@@ -7,6 +7,7 @@ import {
   GEO_REGIONS,
   LIQUIDEZ_OPERATIVA_SUBCLASSES,
   COST_FIELDS,
+  GEO_SUMA_TOLERANCIA,
 } from "./model.js";
 import { store, latestPositionsByAssetEntity } from "./store.js";
 import { valueOfPosition } from "./metrics.js";
@@ -126,10 +127,11 @@ export function renderCatalog(container) {
                 </label>
                 <div id="lookthrough-field" style="display:none">
                   <label class="checkbox-label"><input name="hedged" type="checkbox" ${editing?.hedged ? "checked" : ""} /> Cubierto a EUR (hedged)</label>
-                  <p class="muted">Opcional: de dónde vienen de verdad sus posiciones subyacentes (según el KIID/factsheet del fondo), para el informe X-Ray. Déjalo en blanco si no lo sabes — no hace falta rellenarlo para todos los fondos a la vez, el informe funciona con los que vayas completando.</p>
+                  <p class="muted">Opcional: de dónde vienen de verdad sus posiciones subyacentes (según el KIID/factsheet del fondo), para el informe X-Ray. Déjalo en blanco si no lo sabes — no hace falta rellenarlo para todos los fondos a la vez, el informe funciona con los que vayas completando. Una región vacía cuenta como 0 %, y el total debe sumar 100 %. En un fondo mixto el reparto va sobre el fondo entero (renta variable y fija juntas), no solo sobre la parte de bolsa.</p>
                   ${GEO_REGIONS.map(
                     (r) => `<label>${r.label} (%) <input name="geo_${r.key}" type="number" min="0" max="100" step="any" value="${editing?.geoBreakdown?.[r.key] ?? ""}" /></label>`
                   ).join("")}
+                  <p id="geo-suma" class="muted"></p>
                 </div>
                 <div id="costes-field" style="display:none">
                   <p class="muted">Opcional: costes recurrentes anuales, para el seguimiento de costes de Fiscalidad. Si indicas el TER, la app lo toma como el coste total del activo (todo incluido) e ignora los otros campos; si lo dejas en blanco, suma custodia + gestión + asesoramiento. Si el coste real es mayor que el TER (p.ej. custodia de un ETF), indica ahí el total. No hace falta rellenarlo todo de golpe.</p>
@@ -196,6 +198,21 @@ export function renderCatalog(container) {
   const vencimientoField = container.querySelector("#vencimiento-field");
   const lookthroughField = container.querySelector("#lookthrough-field");
   const costesField = container.querySelector("#costes-field");
+  const geoSumaLabel = container.querySelector("#geo-suma");
+  function refreshGeoSuma() {
+    if (!geoSumaLabel) return;
+    const inputs = GEO_REGIONS.map((r) => container.querySelector(`input[name="geo_${r.key}"]`));
+    if (inputs.every((i) => i.value === "")) {
+      geoSumaLabel.textContent = "";
+      return;
+    }
+    const suma = inputs.reduce((s, i) => s + (Number(i.value) || 0), 0);
+    const ok = Math.abs(suma - 100) <= GEO_SUMA_TOLERANCIA;
+    geoSumaLabel.textContent = ok ? `Suma: ${suma.toFixed(1)} % ✓` : `⚠ Suma: ${suma.toFixed(1)} % — debería ser 100 %`;
+    geoSumaLabel.style.color = ok ? "" : "var(--neg)";
+  }
+  GEO_REGIONS.forEach((r) => container.querySelector(`input[name="geo_${r.key}"]`)?.addEventListener("input", refreshGeoSuma));
+  refreshGeoSuma();
   const rentedCheckbox = container.querySelector('input[name="rented"]');
   const rentaAnualField = container.querySelector("#renta-anual-field");
   if (rentedCheckbox) {
@@ -286,6 +303,13 @@ export function renderCatalog(container) {
         GEO_REGIONS.forEach((r, i) => {
           geoBreakdown[r.key] = valores[i] === "" || valores[i] == null ? 0 : Number(valores[i]);
         });
+        const suma = GEO_REGIONS.reduce((s, r) => s + geoBreakdown[r.key], 0);
+        if (Math.abs(suma - 100) > GEO_SUMA_TOLERANCIA) {
+          const seguir = confirm(
+            `El reparto geográfico suma ${suma.toFixed(1)} % en vez de 100 %.\n\nSi lo guardas así, el X-Ray lo marcará como desglose incompleto. ¿Guardar igualmente?`
+          );
+          if (!seguir) return;
+        }
       }
     }
     let costes = null;

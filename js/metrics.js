@@ -1,4 +1,13 @@
-import { ASSET_CLASSES, REAL_ESTATE_SUBCLASSES, GEO_REGIONS, GEO_REGIONS_EUR, LIQUIDEZ_OPERATIVA_SUBCLASSES, COST_FIELDS } from "./model.js";
+import {
+  ASSET_CLASSES,
+  REAL_ESTATE_SUBCLASSES,
+  GEO_REGIONS,
+  GEO_REGIONS_EUR,
+  LIQUIDEZ_OPERATIVA_SUBCLASSES,
+  COST_FIELDS,
+  XRAY_REVISION_MESES,
+  GEO_SUMA_TOLERANCIA,
+} from "./model.js";
 import { store, latestPositionsByAssetEntity, latestLiabilityPositions, assetById, entityById } from "./store.js";
 
 // El precio de compra de un inmueble físico cuenta como capital aportado a ese
@@ -1156,6 +1165,7 @@ export function vencimientosProximos() {
 // desglose geográfico introducido o no — para saber qué parte de la
 // cartera ya se puede analizar look-through y cuál falta por completar,
 // ordenada por importe para saber por dónde empieza a compensar más.
+// Los activos a cero (posición final de 0 €) no cuentan: no hay nada que desglosar.
 export function coberturaLookThrough() {
   let total = 0;
   const conDatos = [];
@@ -1164,12 +1174,33 @@ export function coberturaLookThrough() {
     const asset = assetById(p.assetId);
     if (!asset || !esInversionFinanciera(asset)) continue;
     const value = valueOfPosition(p);
+    if (!(value > 0)) continue;
     total += value;
     (asset.geoBreakdown ? conDatos : sinDatos).push({ asset, value });
   }
   sinDatos.sort((a, b) => b.value - a.value);
   const valorConDatos = conDatos.reduce((s, r) => s + r.value, 0);
   return { total, valorConDatos, pctConDatos: total ? (valorConDatos / total) * 100 : 0, sinDatos };
+}
+
+// Suma de los % de un desglose geográfico (las regiones vacías cuentan 0).
+export function sumaGeoBreakdown(geoBreakdown) {
+  return GEO_REGIONS.reduce((s, r) => s + (Number(geoBreakdown?.[r.key]) || 0), 0);
+}
+
+// Activos con desglose y valor actual cuyos % no suman 100 (dentro de la
+// tolerancia): su reparto en el X-Ray quedaría corto o pasado.
+export function desglosesQueNoSuman100() {
+  const resultado = [];
+  for (const p of latestPositionsByAssetEntity()) {
+    const asset = assetById(p.assetId);
+    if (!asset || !esInversionFinanciera(asset) || !asset.geoBreakdown) continue;
+    const value = valueOfPosition(p);
+    if (!(value > 0)) continue;
+    const suma = sumaGeoBreakdown(asset.geoBreakdown);
+    if (Math.abs(suma - 100) > GEO_SUMA_TOLERANCIA) resultado.push({ asset, value, suma });
+  }
+  return resultado.sort((a, b) => b.value - a.value);
 }
 
 // Exposición geográfica real (look-through), ponderada por el valor de cada
@@ -1264,15 +1295,25 @@ function fmtEURInterno(n) {
 }
 
 // Fecha de la última vez que se revisó el X-Ray (para el aviso periódico) y
-// si toca revisarlo ya, según los días de aviso configurados en Ajustes.
+// si toca revisarlo ya: el X-Ray se revisa en las ventanas de XRAY_REVISION_MESES
+// (junio y diciembre); toca si la última revisión es anterior al día 1 de la
+// ventana más reciente ya empezada. También devuelve el inicio de la próxima.
 export function estadoRevisionXray() {
   const data = store.get();
   const ultima = data.meta.xrayUltimaRevision;
-  const diasAviso = Number(data.meta.xrayRevisionDiasAviso) || 0;
-  if (!ultima) return { ultima: null, diasDesde: null, toca: coberturaLookThrough().total > 0 };
-  const hoy = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00");
+  const hoyIso = new Date().toISOString().slice(0, 10);
+  const anio = Number(hoyIso.slice(0, 4));
+  const ventanas = [];
+  for (const a of [anio - 1, anio, anio + 1]) {
+    for (const m of XRAY_REVISION_MESES) ventanas.push(`${a}-${String(m).padStart(2, "0")}-01`);
+  }
+  ventanas.sort();
+  const ventanaActual = [...ventanas].reverse().find((v) => v <= hoyIso);
+  const proximaVentana = ventanas.find((v) => v > hoyIso);
+  if (!ultima) return { ultima: null, diasDesde: null, toca: coberturaLookThrough().total > 0, ventanaActual, proximaVentana };
+  const hoy = new Date(hoyIso + "T00:00:00");
   const dias = Math.round((hoy - new Date(ultima + "T00:00:00")) / 86400000);
-  return { ultima, diasDesde: dias, toca: dias >= diasAviso };
+  return { ultima, diasDesde: dias, toca: ultima < ventanaActual, ventanaActual, proximaVentana };
 }
 
 // --- Seguimiento de costes ---

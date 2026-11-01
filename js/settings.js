@@ -137,9 +137,7 @@ export function renderSettings(container) {
       <label>Umbral de concentración geográfica real (%, look-through)
         <input id="concentracion-geografica-umbral" type="number" step="any" min="0" max="100" value="${data.meta.concentracionGeograficaUmbralPct}" />
       </label>
-      <label>Días entre avisos de revisar el X-Ray
-        <input id="xray-revision-dias" type="number" step="1" min="0" value="${data.meta.xrayRevisionDiasAviso}" />
-      </label>
+      <p class="muted">El X-Ray avisa de revisarlo dos veces al año: desde el 1 de junio y desde el 1 de diciembre, hasta que lo marques como revisado.</p>
       <button id="save-xray-umbrales">Guardar</button>
     </section>
 
@@ -383,12 +381,11 @@ export function renderSettings(container) {
 
   container.querySelector("#save-xray-umbrales").addEventListener("click", () => {
     const concentracionGeograficaUmbralPct = Number(container.querySelector("#concentracion-geografica-umbral").value);
-    const xrayRevisionDiasAviso = Number(container.querySelector("#xray-revision-dias").value);
-    if ([concentracionGeograficaUmbralPct, xrayRevisionDiasAviso].some((n) => isNaN(n) || n < 0)) {
+    if (isNaN(concentracionGeograficaUmbralPct) || concentracionGeograficaUmbralPct < 0) {
       alert("Introduce valores válidos.");
       return;
     }
-    store.updateMeta({ concentracionGeograficaUmbralPct, xrayRevisionDiasAviso });
+    store.updateMeta({ concentracionGeograficaUmbralPct });
     alert("Guardado.");
   });
 
