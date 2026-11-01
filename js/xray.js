@@ -1,5 +1,6 @@
 import { store } from "./store.js";
 import { GEO_REGIONS } from "./model.js";
+import { WORLD_MAP_PATHS, WORLD_MAP_VIEWBOX } from "./worldmap.js";
 import {
   coberturaLookThrough,
   desglosesQueNoSuman100,
@@ -40,33 +41,22 @@ function legendRow(color, label, value, total) {
   </div>`;
 }
 
-// Gráfico circular de la exposición geográfica real, mismo estilo que los
-// donuts de Inicio (dashboard.js): un arco por región con su color.
-function geoDonutSvg(geo) {
-  const size = 180;
-  const r = 62;
-  const cx = size / 2;
-  const cy = size / 2;
-  const circumference = 2 * Math.PI * r;
-  const gap = 3;
-  const total = geo.totalConDatos;
-  let offset = 0;
-  let segments = "";
-  for (const reg of GEO_REGIONS) {
-    const value = geo.porRegion[reg.key];
-    if (!(value > 0)) continue;
-    const frac = value / total;
-    const len = Math.max(0, frac * circumference - gap);
-    segments += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${REGION_COLORS[reg.key]}"
-      stroke-width="24" stroke-linecap="round" stroke-dasharray="${len} ${circumference - len}"
-      stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" />`;
-    offset += frac * circumference;
-  }
-  return `<svg viewBox="0 0 ${size} ${size}" class="donut" role="img" aria-label="Exposición geográfica real">
-    ${segments}
-    <text x="${cx}" y="${cy - 4}" text-anchor="middle" class="donut-total" style="font-size:15px">${fmtEUR(total)}</text>
-    <text x="${cx}" y="${cy + 14}" text-anchor="middle" class="donut-label">analizado</text>
-  </svg>`;
+// Planisferio de la exposición geográfica real: cada región se pinta con su
+// color (el de la leyenda) y tanta más intensidad cuanto más pesa; las regiones
+// sin nada quedan en gris. España se dibuja la última para que no la tape nadie.
+function geoMapSvg(geo) {
+  const max = Math.max(...GEO_REGIONS.map((r) => geo.porRegion[r.key]));
+  const paths = [...GEO_REGIONS]
+    .reverse()
+    .map((r) => {
+      const value = geo.porRegion[r.key];
+      const pct = geo.totalConDatos ? (value / geo.totalConDatos) * 100 : 0;
+      const fill = value > 0 ? REGION_COLORS[r.key] : "var(--border)";
+      const opacity = value > 0 ? (0.35 + 0.65 * (value / max)).toFixed(2) : 1;
+      return `<path d="${WORLD_MAP_PATHS[r.key]}" fill="${fill}" fill-opacity="${opacity}" stroke="var(--bg-card)" stroke-width="0.6" stroke-linejoin="round"><title>${r.label}: ${fmtPct1(pct)}</title></path>`;
+    })
+    .join("");
+  return `<svg viewBox="${WORLD_MAP_VIEWBOX}" class="geo-map" role="img" aria-label="Mapa de exposición geográfica real">${paths}</svg>`;
 }
 
 export function renderXray(container) {
@@ -139,7 +129,8 @@ export function renderXray(container) {
       <p class="muted">Ponderada por lo que hay dentro de cada fondo, no por su etiqueta. Calculada solo sobre el ${fmtPct1(cobertura.pctConDatos)} ya desglosado.</p>
       ${
         geo.totalConDatos > 0
-          ? `<div class="card-donut">${geoDonutSvg(geo)}</div>
+          ? `${geoMapSvg(geo)}
+             <p class="muted">Más intensidad = más peso. «Otros» pinta Canadá, Japón, Australia… (el «global diversificado» no tiene sitio en el mapa); «Emergentes» pinta el resto del mundo.</p>
              <div class="legend">${GEO_REGIONS.map((r) => legendRow(REGION_COLORS[r.key], r.label, geo.porRegion[r.key], geo.totalConDatos)).join("")}</div>`
           : `<p class="muted">Añade composición a algún fondo en Activos para ver esto.</p>`
       }
