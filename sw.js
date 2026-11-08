@@ -1,4 +1,4 @@
-const CACHE = "gestor-patrimonial-v73";
+const CACHE = "gestor-patrimonial-v74";
 const ASSETS = [
   "./",
   "./index.html",
@@ -10,6 +10,8 @@ const ASSETS = [
   "./js/metrics.js",
   "./js/modal.js",
   "./js/lock.js",
+  "./js/modo.js",
+  "./js/familia.js",
   "./js/dashboard.js",
   "./js/catalog.js",
   "./js/positions.js",
@@ -44,8 +46,14 @@ self.addEventListener("activate", (event) => {
 // y solo usa la copia local guardada cuando no hay internet.
 // cache:"no-store" evita que la caché HTTP del navegador (no la de esta
 // app) sirva una versión vieja sin llegar siquiera a preguntar al servidor.
+//
+// Solo se gestionan las peticiones de la propia app (mismo origen). Las de
+// Google (API de Drive, librerías) NO se tocan: si pasaran por aquí se
+// guardarían en la caché del navegador, es decir, una copia en disco de los
+// datos descargados de Drive, justo lo que no debe pasar.
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
     fetch(event.request, { cache: "no-store" })
       .then((response) => {

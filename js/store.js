@@ -1,4 +1,5 @@
 import { emptyData, uid, REAL_ESTATE_SUBCLASSES } from "./model.js";
+import { esModoFamilia, SoloLecturaError } from "./modo.js";
 
 const KEY = "gestorPatrimonial:data";
 
@@ -28,6 +29,9 @@ function withDefaults(parsed) {
 }
 
 function load() {
+  // Modo familiar: nunca se lee ni se guarda nada local; los datos llegan
+  // de Drive y viven solo en memoria.
+  if (esModoFamilia()) return emptyData();
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return emptyData();
@@ -65,6 +69,8 @@ export function onChange(fn) {
 // no relanzar inmediatamente un guardado de vuelta con lo mismo que se
 // acaba de recibir (el eco típico de una sincronización de ida y vuelta).
 function persist(opts = {}) {
+  // En modo familiar no se persiste nada (ni local ni hacia Drive).
+  if (esModoFamilia()) return;
   localStorage.setItem(KEY, JSON.stringify(data));
   if (!opts.silent) changeListeners.forEach((fn) => fn());
 }
@@ -241,6 +247,31 @@ export const store = {
     persist(opts);
   },
 };
+
+// En modo familiar el store es de solo lectura: todo método que modifica
+// datos lanza SoloLecturaError (y no toca nada). Las únicas excepciones son
+// get/exportJson (lectura), replaceAll (lo usa la carga desde Drive, que en
+// este modo no persiste) y updateMeta: los simuladores recuerdan ahí sus
+// últimos parámetros, y en este modo solo cambia la memoria de la pestaña
+// (persist() no guarda nada), así que los simuladores siguen funcionando.
+const METODOS_QUE_ESCRIBEN = [
+  "addEntity", "removeEntity",
+  "addAsset", "updateAsset", "removeAsset",
+  "addPosition", "updatePosition", "removePosition",
+  "addMovement", "updateMovement", "removeMovement",
+  "updateSecurity",
+  "addLiability", "updateLiability", "removeLiability",
+  "addLiabilityPosition", "updateLiabilityPosition", "removeLiabilityPosition",
+  "addDecision", "updateDecision", "removeDecision",
+  "importJson",
+];
+for (const nombre of METODOS_QUE_ESCRIBEN) {
+  const original = store[nombre];
+  store[nombre] = (...args) => {
+    if (esModoFamilia()) throw new SoloLecturaError();
+    return original(...args);
+  };
+}
 
 // --- Helpers de consulta ---
 

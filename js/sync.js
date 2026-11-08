@@ -8,6 +8,7 @@
 // conexión.
 
 import { store, onChange } from "./store.js";
+import { esModoFamilia, SoloLecturaError } from "./modo.js";
 import {
   conectarInteractivo,
   conectarSilencioso,
@@ -85,6 +86,7 @@ async function pullInicial() {
 // elegir cuenta siempre. interactivo:false es el intento silencioso al
 // abrir la app en un dispositivo ya conectado antes.
 export async function conectar({ interactivo = false } = {}) {
+  if (esModoFamilia()) return false; // el modo familiar nunca sincroniza (ni escribe) por esta vía
   if (conectado) return true;
   try {
     const token = interactivo ? await conectarInteractivo() : await conectarSilencioso();
@@ -113,7 +115,7 @@ function programarEmpuje() {
 
 // Devuelve true solo si lo subió de verdad a Drive.
 export async function empujarAhora() {
-  if (!conectado || sincronizando) return false;
+  if (esModoFamilia() || !conectado || sincronizando) return false;
   clearTimeout(pushTimer);
   sincronizando = true;
   notificar({ tipo: "sincronizando" });
@@ -145,6 +147,7 @@ export async function empujarAhora() {
 // descarta los cambios locales pendientes de subir), "local" fuerza el
 // guardado local por encima de lo que hay en Drive.
 export async function resolverConflicto(eleccion) {
+  if (esModoFamilia()) throw new SoloLecturaError();
   if (eleccion === "remoto") {
     const resultado = await cargarDesdeDrive();
     if (resultado.encontrado) aplicarRemoto(resultado.contenido, resultado.modifiedTime);

@@ -7,6 +7,9 @@
 
 import { store } from "./store.js";
 import { conectar as conectarDrive } from "./sync.js";
+import { esModoFamilia, activarModoFamilia, desactivarModoFamilia } from "./modo.js";
+import { elegirFicheroCompartido, metadatosFichero, ErrorSinSesion, ErrorSinAcceso } from "./drive.js";
+import { actualizar, validarFichero, esc } from "./familia.js";
 
 const SESSION_KEY = "gestorPatrimonial:unlocked";
 
@@ -65,6 +68,12 @@ export function ensureUnlocked() {
       renderCryptoUnavailable(resolve);
       return;
     }
+    if (esModoFamilia()) {
+      // Sin copia local no hay contraseña guardada en este equipo: primero se
+      // baja el fichero de Drive (ahí viaja el candado) y luego se pide.
+      renderFamiliaConectando(resolve);
+      return;
+    }
     const stored = getStoredPin();
     if (!stored) {
       renderSetup(resolve);
@@ -111,8 +120,14 @@ function renderSetup(resolve) {
         <button type="submit">Guardar y entrar</button>
       </form>
       <p id="lock-error" class="neg"></p>
+      <hr class="lock-sep" />
+      <p class="muted">¿Eres de la familia y solo vas a <strong>consultar</strong> los datos que te han compartido?</p>
+      <button type="button" id="lock-familiar" class="secondary">Soy familiar (solo lectura)</button>
+      <p id="lock-familiar-status" class="muted"></p>
     </div>
   `;
+
+  el.querySelector("#lock-familiar").addEventListener("click", () => activarComoFamiliar(el, resolve));
 
   el.querySelector("#lock-connect-drive").addEventListener("click", async (ev) => {
     const btn = ev.target;
@@ -191,3 +206,123 @@ function renderUnlock(stored, resolve) {
   });
 }
 
+
+// ---------------------------------------------------------------------------
+// Modo familiar
+// ---------------------------------------------------------------------------
+
+// Tras tener los datos en memoria: pide la contraseña del candado (que viaja
+// dentro del fichero) o entra directo si el propietario no puso ninguna.
+function continuarTrasCargaFamilia(resolve) {
+  const stored = getStoredPin();
+  if (!stored || sessionStorage.getItem(SESSION_KEY) === "1") {
+    overlay().remove();
+    resolve();
+    return;
+  }
+  renderUnlock(stored, resolve);
+}
+
+function mensajeError(e) {
+  if (e instanceof ErrorSinAcceso) return "Este fichero ya no está compartido contigo. Pide al propietario que te lo vuelva a compartir.";
+  if (e instanceof ErrorSinSesion) return "Hace falta conectar con tu cuenta de Google.";
+  return e?.message || "Ha ocurrido un error inesperado.";
+}
+
+// Apertura normal de un equipo que ya es "familiar": intenta conectar solo
+// (sin ventanas) y, si Google lo pide, deja un botón con un clic.
+function renderFamiliaConectando(resolve) {
+  const el = overlay();
+  el.innerHTML = `
+    <div class="lock-card">
+      <h2>Gestor patrimonial CELIANCA</h2>
+      <p class="muted">Modo familiar · solo lectura</p>
+      <p id="fam-estado" class="muted">Conectando con Google Drive…</p>
+      <div id="fam-botones" class="btn-row" style="display:none">
+        <button type="button" id="fam-conectar">Conectar con Google</button>
+      </div>
+      <button type="button" id="fam-salir" class="link-btn danger" style="display:none">Dejar el modo familiar en este equipo</button>
+    </div>
+  `;
+  const estado = el.querySelector("#fam-estado");
+  const botones = el.querySelector("#fam-botones");
+  const salir = el.querySelector("#fam-salir");
+
+  async function intentar(gesto) {
+    estado.textContent = "Conectando con Google Drive…";
+    botones.style.display = "none";
+    try {
+      await actualizar({ gesto, forzar: true });
+      continuarTrasCargaFamilia(resolve);
+    } catch (e) {
+      estado.textContent = mensajeError(e) + (e instanceof ErrorSinSesion || e instanceof ErrorSinAcceso ? "" : " Reintenta en un momento.");
+      botones.style.display = "flex";
+      salir.style.display = "inline-block";
+    }
+  }
+  el.querySelector("#fam-conectar").addEventListener("click", () => intentar(true));
+  salir.addEventListener("click", () => {
+    desactivarModoFamilia();
+    location.reload();
+  });
+  intentar(false);
+}
+
+// Primera vez en este equipo: elegir el fichero compartido con el selector de
+// Google, comprobar de quién es y con qué permiso, y confirmar.
+async function activarComoFamiliar(el, resolve) {
+  const boton = el.querySelector("#lock-familiar");
+  const estado = el.querySelector("#lock-familiar-status");
+  boton.disabled = true;
+  estado.textContent = "Abriendo Google… elige tu cuenta y, después, el fichero que te han compartido.";
+  try {
+    const elegido = await elegirFicheroCompartido();
+    if (!elegido) {
+      estado.textContent = "Cancelado. Puedes volver a intentarlo.";
+      return;
+    }
+    const meta = await metadatosFichero(elegido.id, { gesto: true });
+    validarFichero(meta);
+    renderConfirmarFamilia(el, resolve, meta);
+  } catch (e) {
+    estado.textContent = mensajeError(e);
+  } finally {
+    boton.disabled = false;
+  }
+}
+
+function renderConfirmarFamilia(el, resolve, meta) {
+  const propietario = meta.owners?.[0]?.emailAddress || meta.owners?.[0]?.displayName || "desconocido";
+  const solo = meta.capabilities?.canEdit === false;
+  el.innerHTML = `
+    <div class="lock-card">
+      <h2>Confirma el fichero</h2>
+      <p class="muted">Vas a ver, <strong>en solo lectura</strong>, el fichero «${esc(meta.name)}» de:</p>
+      <p><strong>${esc(propietario)}</strong></p>
+      <p class="muted">${
+        solo
+          ? "✅ Tu permiso en Drive es solo lectura."
+          : "⚠ Tienes permiso de edición sobre este fichero. La app seguirá en solo lectura, pero conviene pedir que te lo compartan como «Lector»."
+      }</p>
+      <p class="muted">No se guardará ninguna copia de los datos en este equipo.</p>
+      <div class="btn-row">
+        <button type="button" id="fam-ok">Es correcto, abrir</button>
+        <button type="button" id="fam-cancelar" class="link-btn">Cancelar</button>
+      </div>
+      <p id="fam-error" class="neg"></p>
+    </div>
+  `;
+  el.querySelector("#fam-cancelar").addEventListener("click", () => renderSetup(resolve));
+  el.querySelector("#fam-ok").addEventListener("click", async (ev) => {
+    ev.target.disabled = true;
+    activarModoFamilia(meta.id);
+    try {
+      await actualizar({ gesto: true, forzar: true });
+      continuarTrasCargaFamilia(resolve);
+    } catch (e) {
+      desactivarModoFamilia();
+      ev.target.disabled = false;
+      el.querySelector("#fam-error").textContent = mensajeError(e);
+    }
+  });
+}

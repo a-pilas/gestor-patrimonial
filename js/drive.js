@@ -10,7 +10,15 @@
 // navegador se ha conectado alguna vez, para saber si merece la pena
 // intentar una reconexión silenciosa al abrir la app.
 
+import { esModoFamilia, SoloLecturaError } from "./modo.js";
+
 const CLIENT_ID = "831479772789-30cgf616a909eeqru1o5aun7dk60f16k.apps.googleusercontent.com";
+// Para el selector de ficheros de Google (modo familiar). La clave de API NO
+// es un secreto: solo identifica el proyecto ante el selector y en Google
+// Cloud está restringida a esta web y a la API del selector. APP_ID es el
+// número del proyecto de Google Cloud.
+const API_KEY = "AIzaSyAQsQX8eH6Jasig3gHOtTNMS775vhoLA6U";
+const APP_ID = "831479772789";
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
 const FILE_NAME = "gestor-patrimonial-datos.json";
 const CONECTADO_ANTES_KEY = "gestorPatrimonial:driveConectadoAntes";
@@ -88,6 +96,8 @@ export function conectarSilencioso() {
 }
 
 async function driveFetch(url, options = {}) {
+  // Cinturón y tirantes: en modo familiar esta ruta no puede escribir nunca.
+  if (esModoFamilia() && (options.method || "GET").toUpperCase() !== "GET") throw new SoloLecturaError();
   const token = await getAccessTokenOrThrow();
   const res = await fetch(url, { ...options, headers: { ...(options.headers || {}), Authorization: `Bearer ${token}` } });
   if (res.status === 401) {
@@ -123,6 +133,7 @@ export async function obtenerMetadatosRemotos() {
 }
 
 export async function guardarEnDrive(contenidoJson) {
+  if (esModoFamilia()) throw new SoloLecturaError();
   const existente = await buscarFichero();
   if (existente) {
     const res = await driveFetch(
@@ -161,4 +172,127 @@ export async function cargarDesdeDrive() {
   if (!res.ok) throw new Error(`No se pudo descargar el fichero de Drive (${res.status}).`);
   const contenido = await res.text();
   return { encontrado: true, contenido, modifiedTime: existente.modifiedTime };
+}
+
+
+// ---------------------------------------------------------------------------
+// Modo familiar (solo lectura): fichero de otra persona, elegido una vez con
+// el selector de Google. Todo lo de abajo usa solo peticiones GET.
+// ---------------------------------------------------------------------------
+
+export class ErrorSinSesion extends Error {
+  constructor() {
+    super("No hay sesión de Google activa en este navegador.");
+    this.name = "ErrorSinSesion";
+  }
+}
+
+export class ErrorSinAcceso extends Error {
+  constructor(status) {
+    super("Ya no tienes acceso a ese fichero.");
+    this.name = "ErrorSinAcceso";
+    this.status = status;
+  }
+}
+
+// gesto:true → hay un clic del usuario detrás (puede abrirse la ventana de
+// Google). gesto:false → segundo plano: solo reconexión silenciosa.
+async function tokenParaLectura(gesto) {
+  if (accessToken) return accessToken;
+  const token = gesto ? await pedirToken("") : await conectarSilencioso();
+  if (!token) throw new ErrorSinSesion();
+  return token;
+}
+
+async function fetchLectura(url, { gesto = false } = {}) {
+  const pedir = (token) =>
+    fetch(url, { method: "GET", cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
+  let res = await pedir(await tokenParaLectura(gesto));
+  if (res.status === 401) {
+    accessToken = null;
+    res = await pedir(await tokenParaLectura(gesto));
+  }
+  return res;
+}
+
+export async function metadatosFichero(fileId, opciones = {}) {
+  const campos = "id,name,modifiedTime,trashed,owners(emailAddress,displayName),capabilities(canEdit)";
+  const res = await fetchLectura(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=${encodeURIComponent(campos)}`,
+    opciones
+  );
+  if (res.status === 403 || res.status === 404) throw new ErrorSinAcceso(res.status);
+  if (!res.ok) throw new Error(`No se pudo consultar el fichero en Drive (${res.status}).`);
+  const meta = await res.json();
+  if (meta.trashed) throw new ErrorSinAcceso(404);
+  return meta;
+}
+
+export async function descargarFichero(fileId, opciones = {}) {
+  const res = await fetchLectura(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+    opciones
+  );
+  if (res.status === 403 || res.status === 404) throw new ErrorSinAcceso(res.status);
+  if (!res.ok) throw new Error(`No se pudo descargar el fichero de Drive (${res.status}).`);
+  return res.text();
+}
+
+// Reconexión con un clic del usuario (botón "Conectar con Google"), sin
+// obligarle a elegir cuenta si Google ya la conoce.
+export function reconectarConGesto() {
+  return tokenParaLectura(true);
+}
+
+function cargarScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.async = true;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("No se pudo cargar el selector de ficheros de Google. Comprueba tu conexión."));
+    document.head.appendChild(s);
+  });
+}
+
+async function cargarPicker() {
+  if (window.google?.picker) return;
+  if (!window.gapi?.load) await cargarScript("https://apis.google.com/js/api.js");
+  await new Promise((resolve, reject) => window.gapi.load("picker", { callback: resolve, onerror: reject }));
+}
+
+// Abre el selector de Google para que la persona elija el fichero que le han
+// compartido. Con el permiso drive.file, elegirlo aquí es lo que le da
+// acceso a la app SOLO a ese fichero. Devuelve {id, name} o null si cancela.
+export async function elegirFicheroCompartido() {
+  const token = await pedirToken("select_account");
+  await cargarPicker();
+  const g = window.google.picker;
+  const compartidos = new g.DocsView(g.ViewId.DOCS).setOwnedByMe(false).setIncludeFolders(false);
+  const todos = new g.DocsView(g.ViewId.DOCS).setIncludeFolders(false);
+  return new Promise((resolve) => {
+    const picker = new g.PickerBuilder()
+      .setAppId(APP_ID)
+      .setDeveloperKey(API_KEY)
+      .setOAuthToken(token)
+      .setLocale("es")
+      .setTitle("Elige el fichero gestor-patrimonial-datos.json")
+      .addView(compartidos)
+      .addView(todos)
+      .setCallback((data) => {
+        const accion = data[g.Response.ACTION];
+        if (accion === g.Action.PICKED) {
+          const doc = data[g.Response.DOCUMENTS][0];
+          resolve({ id: doc[g.Document.ID], name: doc[g.Document.NAME] });
+        } else if (accion === g.Action.CANCEL) {
+          resolve(null);
+        }
+      })
+      .build();
+    picker.setVisible(true);
+  });
+}
+
+export function nombreFicheroDatos() {
+  return FILE_NAME;
 }

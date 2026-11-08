@@ -3,3 +3,5 @@ Plantilla_carga_datos.xlsx
 gestor-patrimonial-FUSIONADO*.json
 gestor-patrimonial-*.json
 *.xlsx
+# Credenciales de Google descargadas de la consola (no las usa la app)
+client_secret*.json

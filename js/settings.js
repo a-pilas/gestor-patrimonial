@@ -1,4 +1,6 @@
 import { store } from "./store.js";
+import { esModoFamilia } from "./modo.js";
+import { renderAjustesFamilia } from "./familia.js";
 import { changePin, removePin } from "./lock.js";
 import { ASSET_CLASSES, DEFAULT_TRAMOS_AHORRO, DEFAULT_TRAMOS_PATRIMONIO, DEFAULT_TRAMOS_ITP_VIVIENDA } from "./model.js";
 import {
@@ -12,6 +14,10 @@ import {
 } from "./sync.js";
 
 export function renderSettings(container) {
+  if (esModoFamilia()) {
+    renderAjustesFamilia(container);
+    return;
+  }
   const data = store.get();
   const conectado = estaConectado();
   const conflicto = getUltimoConflicto();
