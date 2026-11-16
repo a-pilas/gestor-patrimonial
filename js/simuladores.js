@@ -1,5 +1,8 @@
 import { store } from "./store.js";
-import { duracionPatrimonio, alquilerAnualTotal, financialBreakdownBySubclass, simulacionCompraPropiedad } from "./metrics.js";
+import { duracionPatrimonio, alquilerAnualTotal, financialBreakdownBySubclass, simulacionCompraPropiedad, evolucionHerencias } from "./metrics.js";
+import { uid } from "./model.js";
+import { openModal } from "./modal.js";
+import { esModoFamilia } from "./modo.js";
 
 function fmtEUR(n) {
   if (n == null || isNaN(n)) return "—";
@@ -134,6 +137,218 @@ function resultadoHtml(resultado) {
   `;
 }
 
+// --- Seguimiento de herencias ---
+
+function esc(t) {
+  return String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+
+function fmtFecha(iso) {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function fmtEURSigno(n) {
+  if (n == null || isNaN(n)) return "—";
+  return (n > 0 ? "+" : "") + fmtEUR(n);
+}
+
+function fmtPctSigno(n, decimales = 1) {
+  if (n == null || isNaN(n)) return "—";
+  const txt = Number(n).toLocaleString("es-ES", { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
+  return `${n > 0 ? "+" : ""}${txt} %`;
+}
+
+function claseSigno(n) {
+  return n > 0 ? "pos" : n < 0 ? "neg" : "";
+}
+
+function filaResultado(etiqueta, valorHtml, claseValor = "") {
+  return `<div class="kpi-row"><span>${etiqueta}</span><span class="${claseValor}">${valorHtml}</span></div>`;
+}
+
+function bloqueHerenciaHtml(r, editable) {
+  const h = r.herencia;
+  const botones = editable
+    ? `<span><button type="button" class="link-btn" data-edit-herencia="${h.id}">editar</button> <button type="button" class="link-btn danger" data-remove-herencia="${h.id}">eliminar</button></span>`
+    : "";
+  const dondeEsta = r.destino ? esc(r.destino.name) : "—";
+  const avisos = r.avisos.map((a) => `<p class="muted neg">⚠ ${esc(a)}</p>`).join("");
+  const cabecera = `<div class="kpi-row"><span><strong>${esc(h.nombre)}</strong></span>${botones}</div>`;
+  if (!r.ok) return `<div class="herencia">${cabecera}${avisos}</div>`;
+
+  const desdeControl = r.desdeControl
+    ? `${filaResultado(
+        `Desde la toma de control (${fmtFecha(r.desdeControl.fecha)}, ${fmtEUR(r.desdeControl.importe)})`,
+        `${fmtEURSigno(r.desdeControl.gananciaEur)} (${fmtPctSigno(r.desdeControl.gananciaPct)})`,
+        claseSigno(r.desdeControl.gananciaEur)
+      )}
+       ${filaResultado(
+        "Media mensual desde la toma de control",
+        `${fmtEURSigno(r.desdeControl.mediaMensualEur)}/mes · ${fmtPctSigno(r.desdeControl.mensualEquivPct, 2)}/mes`,
+        claseSigno(r.desdeControl.mediaMensualEur)
+      )}`
+    : "";
+
+  const serie = `
+    <details>
+      <summary class="muted">Evolución con las posiciones registradas</summary>
+      <div class="table-wrap"><table class="table">
+        <thead><tr><th>Fecha</th><th>Qué</th><th>Valor</th><th>Frente al importe de partida</th></tr></thead>
+        <tbody>${r.serie
+          .map(
+            (s) => `<tr>
+              <td>${fmtFecha(s.fecha)}</td>
+              <td>${esc(s.etiqueta)}</td>
+              <td>${fmtEUR(s.valor)}</td>
+              <td class="${claseSigno(s.gananciaEur)}">${fmtEURSigno(s.gananciaEur)} (${fmtPctSigno(s.gananciaPct)})</td>
+            </tr>`
+          )
+          .join("")}</tbody>
+      </table></div>
+    </details>`;
+
+  return `<div class="herencia">
+    ${cabecera}
+    ${filaResultado("Dónde está hoy", dondeEsta)}
+    ${filaResultado(`Valor en la herencia (${fmtFecha(h.fecha)})`, fmtEUR(r.inicial))}
+    ${filaResultado(`Valor actual (última posición, ${fmtFecha(r.fechaDatos)})`, fmtEUR(r.valorActual))}
+    ${filaResultado("<strong>Ganancia / pérdida total</strong>", `<strong>${fmtEURSigno(r.gananciaEur)} (${fmtPctSigno(r.gananciaPct)})</strong>`, claseSigno(r.gananciaEur))}
+    ${filaResultado("Tiempo transcurrido", fmtMeses(r.meses))}
+    ${filaResultado("<strong>Media mensual (ganancia ÷ meses)</strong>", `<strong>${fmtEURSigno(r.mediaMensualEur)}/mes</strong>`, claseSigno(r.mediaMensualEur))}
+    ${filaResultado("Rentabilidad mensual equivalente (compuesta)", `${fmtPctSigno(r.mensualEquivPct, 2)}/mes`, claseSigno(r.mensualEquivPct))}
+    ${r.anualEquivPct != null ? filaResultado("Equivalente anual", fmtPctSigno(r.anualEquivPct), claseSigno(r.anualEquivPct)) : ""}
+    ${desdeControl}
+    ${avisos}
+    ${serie}
+  </div>`;
+}
+
+function renderHerencias(seccion) {
+  const editable = !esModoFamilia();
+  const { items, total } = evolucionHerencias();
+
+  const totalHtml = total
+    ? `<div class="herencia">
+        <div class="kpi-row"><span><strong>Total de las herencias</strong></span><span></span></div>
+        ${filaResultado("Valor en las herencias", fmtEUR(total.inicial))}
+        ${filaResultado(`Valor actual (hasta ${fmtFecha(total.fechaDatos)})`, fmtEUR(total.valorActual))}
+        ${filaResultado("<strong>Ganancia / pérdida total</strong>", `<strong>${fmtEURSigno(total.gananciaEur)} (${fmtPctSigno(total.gananciaPct)})</strong>`, claseSigno(total.gananciaEur))}
+        ${filaResultado("<strong>Media mensual (suma de las de cada herencia)</strong>", `<strong>${fmtEURSigno(total.mediaMensualEur)}/mes</strong>`, claseSigno(total.mediaMensualEur))}
+      </div>`
+    : "";
+
+  seccion.innerHTML = `
+    <h3>Herencias: ¿cuánto han ganado o perdido desde que las heredé?</h3>
+    <p class="muted">Compara lo que valían los fondos heredados el día de la herencia con la última posición registrada del activo donde están hoy, y reparte la ganancia o pérdida por meses. No son precios en vivo: «hoy» es la fecha de tu última posición en Posiciones, y el resultado se recalcula solo al actualizarla. Es una variación bruta (antes de impuestos); la media mensual simple es ganancia ÷ meses, y la equivalente compuesta es el % mensual constante que daría el mismo resultado final.</p>
+    ${items.map((r) => bloqueHerenciaHtml(r, editable)).join("") || '<p class="muted">Todavía no hay ninguna herencia registrada.</p>'}
+    ${totalHtml}
+    ${editable ? '<div class="btn-row"><button type="button" id="btn-new-herencia">+ Añadir herencia</button></div>' : ""}
+  `;
+
+  if (!editable) return;
+
+  const guardar = (lista) => {
+    store.updateMeta({ herencias: lista });
+    renderHerencias(seccion);
+  };
+  const listaActual = () => [...(store.get().meta.herencias || [])];
+
+  seccion.querySelector("#btn-new-herencia").addEventListener("click", () => abrirFormularioHerencia(null, guardar, listaActual));
+  seccion.querySelectorAll("[data-edit-herencia]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const h = listaActual().find((x) => x.id === btn.dataset.editHerencia);
+      if (h) abrirFormularioHerencia(h, guardar, listaActual);
+    })
+  );
+  seccion.querySelectorAll("[data-remove-herencia]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      if (confirm("¿Eliminar esta herencia del seguimiento? No se borra ninguna posición ni movimiento, solo este cálculo.")) {
+        guardar(listaActual().filter((x) => x.id !== btn.dataset.removeHerencia));
+      }
+    })
+  );
+}
+
+function abrirFormularioHerencia(editing, guardar, listaActual) {
+  const data = store.get();
+  const entidad = (id) => data.entities.find((e) => e.id === id)?.name;
+  const activos = data.assets
+    .filter((a) => a.class !== "inmobiliario")
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  const opciones = (seleccionado) =>
+    activos
+      .map((a) => `<option value="${a.id}" ${a.id === seleccionado ? "selected" : ""}>${esc(a.name)}${entidad(a.entityId) ? ` · ${esc(entidad(a.entityId))}` : ""}</option>`)
+      .join("");
+
+  openModal(editing ? "Editar herencia" : "Añadir herencia", (body, closeModal) => {
+    body.innerHTML = `
+      <form id="form-herencia" class="stacked-form">
+        <label>Nombre
+          <input name="nombre" required placeholder="Ej.: Herencia Quality → Cartesio" value="${esc(editing?.nombre || "")}" />
+        </label>
+        <label>Fecha de la herencia
+          <input name="fecha" type="date" min="2000-01-01" required value="${editing?.fecha || ""}" />
+        </label>
+        <label>Valor a esa fecha (€) — el del certificado de posiciones
+          <input name="importeInicial" type="number" step="any" min="0.01" required value="${editing?.importeInicial ?? ""}" />
+        </label>
+        <label>Dónde está hoy
+          <select name="assetId" required><option value="">Elige el activo…</option>${opciones(editing?.assetId)}</select>
+        </label>
+        <label>Dónde estaba antes (opcional, si ya lo has traspasado y figura en la app)
+          <select name="origenId"><option value="">(no figura en la app)</option>${opciones(editing?.origenId)}</select>
+        </label>
+        <label>Toma de control efectivo — fecha (opcional)
+          <input name="fechaControl" type="date" min="2000-01-01" value="${editing?.fechaControl || ""}" />
+        </label>
+        <label>Toma de control efectivo — valor ese día (€, opcional)
+          <input name="importeControl" type="number" step="any" min="0.01" value="${editing?.importeControl ?? ""}" />
+        </label>
+        <button type="submit">${editing ? "Guardar cambios" : "Guardar herencia"}</button>
+      </form>
+    `;
+    const form = body.querySelector("#form-herencia");
+    form.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(form);
+      const fecha = fd.get("fecha");
+      const fechaControl = fd.get("fechaControl") || null;
+      const importeControl = fd.get("importeControl") ? Number(fd.get("importeControl")) : null;
+      const origenId = fd.get("origenId") || null;
+      if (origenId && origenId === fd.get("assetId")) {
+        alert("«Dónde estaba antes» y «Dónde está hoy» no pueden ser el mismo activo.");
+        return;
+      }
+      if ((fechaControl && !importeControl) || (!fechaControl && importeControl)) {
+        alert("Para la toma de control indica la fecha y el valor, o deja las dos casillas en blanco.");
+        return;
+      }
+      if (fechaControl && fechaControl <= fecha) {
+        alert("La toma de control tiene que ser posterior a la fecha de la herencia.");
+        return;
+      }
+      const payload = {
+        id: editing?.id || uid(),
+        nombre: fd.get("nombre").trim(),
+        fecha,
+        importeInicial: Number(fd.get("importeInicial")),
+        assetId: fd.get("assetId"),
+        origenId,
+        fechaControl,
+        importeControl,
+      };
+      const lista = listaActual();
+      const idx = lista.findIndex((x) => x.id === payload.id);
+      if (idx >= 0) lista[idx] = payload;
+      else lista.push(payload);
+      closeModal();
+      guardar(lista);
+    });
+  });
+}
+
 export function renderSimuladores(container) {
   const data = store.get();
   const meta = data.meta;
@@ -217,6 +432,8 @@ export function renderSimuladores(container) {
       </form>
       <div id="resultado-compra"></div>
     </section>
+
+    <section class="card" id="card-herencias"></section>
   `;
 
   const form = container.querySelector("#form-simulador");
@@ -312,4 +529,6 @@ export function renderSimuladores(container) {
   if (meta.compraPropiedadPrecio != null && meta.compraPropiedadImporteHipoteca != null) {
     calcularCompraYMostrar();
   }
+
+  renderHerencias(container.querySelector("#card-herencias"));
 }

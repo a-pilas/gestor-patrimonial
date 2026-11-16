@@ -192,6 +192,9 @@ export function emptyData() {
       compraPropiedadAniosFijos: null,
       xrayUltimaRevision: null,
       concentracionGeograficaUmbralPct: DEFAULT_CONCENTRACION_GEOGRAFICA_UMBRAL_PCT,
+      // Seguimiento de herencias (pestaña Simuladores): lista de
+      // { id, nombre, fecha, importeInicial, assetId, origenId, fechaControl, importeControl }.
+      herencias: [],
       version: 1,
     },
     // Aparte de "meta" a propósito: el candado no es una preferencia

@@ -1396,3 +1396,142 @@ export function asignacionRvRfInversionFinanciera() {
   }
   return { rv, rf, mixtoSinReparto, otros, total: rv + rf + mixtoSinReparto + otros };
 }
+
+// --- Seguimiento de herencias ---
+// "¿Cuánto han ganado o perdido, desde la fecha de la herencia, las inversiones
+// donde están hoy los fondos que heredé?" Compara el importe de partida con la
+// última posición registrada del activo de destino. No hay precios en vivo:
+// "hoy" es la fecha de la última posición anotada en Posiciones, así que el
+// resultado se recalcula solo cada vez que se actualiza esa posición.
+const DIAS_POR_MES = 30.4375;
+
+function diasEntre(desdeIso, hastaIso) {
+  return Math.round((Date.parse(hastaIso) - Date.parse(desdeIso)) / 86400000);
+}
+
+// Última posición conocida de un activo (prefiere la de la entidad a la que
+// pertenece el activo; las posiciones se agrupan por entidad|activo).
+function ultimaPosicionDeActivo(assetId) {
+  const asset = assetById(assetId);
+  const candidatas = latestPositionsByAssetEntity().filter((p) => p.assetId === assetId);
+  if (!candidatas.length) return null;
+  return (
+    candidatas.find((p) => p.entityId === (asset?.entityId ?? null)) ||
+    [...candidatas].sort((a, b) => (a.date < b.date ? 1 : -1))[0]
+  );
+}
+
+function tramoHerencia(inicial, valor, desde, hasta) {
+  const dias = diasEntre(desde, hasta);
+  const meses = dias / DIAS_POR_MES;
+  const gananciaEur = valor - inicial;
+  return {
+    meses,
+    gananciaEur,
+    gananciaPct: inicial > 0 ? (gananciaEur / inicial) * 100 : null,
+    mediaMensualEur: meses > 0 ? gananciaEur / meses : null,
+    // % mensual constante que daría el mismo resultado final (interés compuesto)
+    mensualEquivPct: meses > 0 && inicial > 0 && valor > 0 ? (Math.pow(valor / inicial, 1 / meses) - 1) * 100 : null,
+    // Anualizar un periodo muy corto da cifras absurdas: solo desde 3 meses.
+    anualEquivPct: meses >= 3 && inicial > 0 && valor > 0 ? (Math.pow(valor / inicial, 12 / meses) - 1) * 100 : null,
+  };
+}
+
+// Evolución de UNA herencia. Devuelve siempre un objeto; si no se puede
+// calcular, ok=false y en "avisos" va el motivo.
+export function evolucionHerencia(h) {
+  const data = store.get();
+  const destino = assetById(h.assetId) || null;
+  const origen = h.origenId ? assetById(h.origenId) || null : null;
+  const inicial = Number(h.importeInicial) || 0;
+  const res = { herencia: h, destino, origen, ok: false, inicial, avisos: [], serie: [] };
+
+  if (!destino) {
+    res.avisos.push("El activo de destino ya no existe. Edita la herencia y elige otro.");
+    return res;
+  }
+  if (!(inicial > 0) || !h.fecha) {
+    res.avisos.push("Faltan la fecha o el importe de partida.");
+    return res;
+  }
+  const pos = ultimaPosicionDeActivo(h.assetId);
+  if (!pos) {
+    res.avisos.push("El activo de destino no tiene ninguna posición registrada todavía.");
+    return res;
+  }
+  const valorActual = valueOfPosition(pos);
+  res.valorActual = valorActual;
+  res.fechaDatos = pos.date;
+  if (pos.date <= h.fecha) {
+    res.avisos.push("La última posición registrada del destino es anterior (o igual) a la fecha de la herencia.");
+    return res;
+  }
+  if (valorActual <= 0) {
+    res.avisos.push("La última posición del destino es 0 €: ¿se ha traspasado o vendido? Edita la herencia y elige dónde está ahora.");
+    return res;
+  }
+
+  Object.assign(res, tramoHerencia(inicial, valorActual, h.fecha, pos.date));
+  res.ok = true;
+
+  // Tramo desde la toma de control efectivo (si se indicó).
+  const importeControl = Number(h.importeControl) || 0;
+  if (h.fechaControl && importeControl > 0 && h.fechaControl > h.fecha && h.fechaControl < pos.date) {
+    res.desdeControl = {
+      fecha: h.fechaControl,
+      importe: importeControl,
+      ...tramoHerencia(importeControl, valorActual, h.fechaControl, pos.date),
+    };
+  }
+
+  // Serie con los puntos conocidos entre la herencia y hoy (origen + destino).
+  const serie = [{ fecha: h.fecha, etiqueta: "Herencia (importe de partida)", valor: inicial }];
+  if (res.desdeControl) serie.push({ fecha: h.fechaControl, etiqueta: "Toma de control efectivo", valor: importeControl });
+  for (const p of data.positions) {
+    if (p.assetId !== h.assetId && p.assetId !== h.origenId) continue;
+    if (p.date <= h.fecha) continue;
+    const v = valueOfPosition(p);
+    if (v <= 0) continue;
+    serie.push({ fecha: p.date, etiqueta: assetById(p.assetId)?.name || "—", valor: v });
+  }
+  serie.sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0));
+  res.serie = serie.map((s) => ({ ...s, gananciaEur: s.valor - inicial, gananciaPct: (s.valor / inicial - 1) * 100 }));
+
+  // Aviso si el destino tiene movimientos posteriores a la toma de control
+  // (aportaciones, retiradas...): entonces no todo su valor viene de la herencia.
+  const limite = res.desdeControl ? h.fechaControl : h.fecha;
+  const sueltos = data.movements.filter((m) => {
+    if (m.date <= limite) return false;
+    if (m.assetId === h.assetId) return !(m.type === "traspaso" && h.origenId && m.fromAssetId === h.origenId);
+    return h.origenId && m.assetId === h.origenId;
+  });
+  if (sueltos.length) {
+    res.avisos.push(
+      `Hay ${sueltos.length} movimiento${sueltos.length > 1 ? "s" : ""} en estos activos posteriores a la herencia (aportaciones, retiradas...). El cálculo da por hecho que todo el valor actual procede de la herencia; revísalo.`
+    );
+  }
+  return res;
+}
+
+// Todas las herencias guardadas, más un total si hay varias calculables.
+// La media mensual del total es la suma de las medias de cada una (cada una
+// con su propio periodo), no el total entre un único número de meses.
+export function evolucionHerencias() {
+  const lista = store.get().meta.herencias || [];
+  const items = lista.map(evolucionHerencia);
+  const ok = items.filter((r) => r.ok);
+  let total = null;
+  if (ok.length >= 2) {
+    const inicial = ok.reduce((s, r) => s + r.inicial, 0);
+    const valorActual = ok.reduce((s, r) => s + r.valorActual, 0);
+    total = {
+      inicial,
+      valorActual,
+      gananciaEur: valorActual - inicial,
+      gananciaPct: inicial > 0 ? ((valorActual - inicial) / inicial) * 100 : null,
+      mediaMensualEur: ok.reduce((s, r) => s + r.mediaMensualEur, 0),
+      fechaDatos: ok.map((r) => r.fechaDatos).sort().pop(),
+    };
+  }
+  return { items, total };
+}

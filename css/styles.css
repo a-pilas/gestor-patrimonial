@@ -162,6 +162,11 @@ body {
 
 .kpi-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed var(--border); }
 .kpi-row:last-of-type { border-bottom: none; }
+/* Seguimiento de herencias (Simuladores): cada herencia es un bloque separado */
+.herencia { margin: 14px 0; padding-top: 10px; border-top: 1px solid var(--border); }
+.herencia:first-of-type { border-top: none; padding-top: 0; }
+.herencia details { margin-top: 8px; }
+.herencia summary { cursor: pointer; }
 .pos { color: var(--pos); }
 .neg { color: var(--neg); }
 .muted { color: var(--muted); font-size: 0.85rem; }
