@@ -14,6 +14,7 @@ import {
   DEFAULT_MINIMO_PERSONAL_AUTONOMICO,
   DEFAULT_TASA_RETIRADA_PCT,
   DEFAULT_INTERES_LIQUIDEZ_PCT,
+  DEFAULT_MC_VOLATILIDADES_PCT,
 } from "./model.js";
 import { store, latestPositionsByAssetEntity, latestLiabilityPositions, assetById, entityById } from "./store.js";
 
@@ -874,6 +875,26 @@ export function composicionFinancieraParaRetirada({ incluirPlanes = true, inclui
     plusvaliaPct,
     dividendos12m: dividendosUltimos12Meses(),
   };
+}
+
+// Volatilidad anual supuesta de la cartera para el Monte Carlo: media de la
+// volatilidad de cada clase de activo ponderada por su peso en el patrimonio
+// financiero incluido en la simulación. Es PRUDENTE a propósito: equivale a
+// suponer que las clases se mueven del todo a la par (sin el efecto
+// amortiguador de diversificar), así que sobrestima algo el riesgo real.
+// `volatilidadesPct` = { renta_variable, mixto, renta_fija, liquidez } (%).
+export function volatilidadCartera({ incluirPlanes = true, incluirLiquidez = true, volatilidadesPct } = {}) {
+  const vols = { ...DEFAULT_MC_VOLATILIDADES_PCT, ...(volatilidadesPct || {}) };
+  const pesos = { renta_variable: 0, mixto: 0, renta_fija: 0, liquidez: 0 };
+  for (const { p, asset } of financialPositions()) {
+    if (LIQUIDEZ_OPERATIVA_SUBCLASSES.includes(asset.subclass) && !incluirLiquidez) continue;
+    if (asset.subclass === "Plan de pensiones" && !incluirPlanes) continue;
+    const clase = pesos[asset.class] !== undefined ? asset.class : "mixto";
+    pesos[clase] += valueOfPosition(p);
+  }
+  const total = pesos.renta_variable + pesos.mixto + pesos.renta_fija + pesos.liquidez;
+  const volPct = total > 0 ? Object.keys(pesos).reduce((s, c) => s + (pesos[c] / total) * (Number(vols[c]) || 0), 0) : 0;
+  return { volPct, pesos, total };
 }
 
 // "Regla del X %" + estimación del neto mensual disponible con desglose de

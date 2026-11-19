@@ -6,8 +6,10 @@ import {
   evolucionHerencias,
   simulacionRetirada,
   composicionFinancieraParaRetirada,
+  volatilidadCartera,
 } from "./metrics.js";
-import { uid, DEFAULT_TASA_RETIRADA_PCT, DEFAULT_INTERES_LIQUIDEZ_PCT } from "./model.js";
+import { simulacionMonteCarlo, MC_SIMULACIONES } from "./montecarlo.js";
+import { uid, DEFAULT_TASA_RETIRADA_PCT, DEFAULT_INTERES_LIQUIDEZ_PCT, DEFAULT_MC_SEMILLA, DEFAULT_MC_VOLATILIDADES_PCT } from "./model.js";
 import { openModal } from "./modal.js";
 import { esModoFamilia } from "./modo.js";
 
@@ -150,6 +152,102 @@ function netoMensualHtml(s) {
     ${fila(`Impuestos totales sobre el gasto bruto`, `${fmtEUR(s.impuestosTotales)} (${fmtPct(s.tipoEfectivoPct)})`)}
     ${avisos}
     <p class="muted">La retirada sale a prorrata de lo que tienes: ${pctReparto(s.reparto.inversion)} fondos/ETF/acciones, ${pctReparto(s.reparto.planes)} planes de pensiones, ${pctReparto(s.reparto.liquidez)} liquidez. En fondos solo tributa la parte de plusvalía (${fmtPct(s.plusvaliaPct)} de lo retirado); en planes de pensiones tributa todo el rescate como rendimiento del trabajo (base general); en cuentas y depósitos, solo los intereses (supuesto ${fmtPct(s.interesLiquidezPct)} anual). Dividendos: los de los últimos 12 meses registrados. Reparto a partes iguales entre ${s.contribuyentes} contribuyente${s.contribuyentes > 1 ? "s" : ""}, con la escala del ahorro y la general de Galicia de Ajustes (el alquiler se grava sin reducción ni gastos salvo que los indiques en los supuestos). No incluye pensión pública, deducciones personales distintas del mínimo, ni cambios futuros de normativa: es una foto de hoy, aproximada y no sustituye a tu declaración.</p>
+  `;
+}
+
+// --- Monte Carlo ---
+
+// 1.234.567 → "1,2 M€"; 56.000 → "56 k€" (etiquetas de los ejes).
+function fmtCorto(n) {
+  const a = Math.abs(n);
+  if (a >= 1e6) return `${(n / 1e6).toLocaleString("es-ES", { maximumFractionDigits: 1 })} M€`;
+  if (a >= 1e3) return `${Math.round(n / 1e3).toLocaleString("es-ES")} k€`;
+  return `${Math.round(n)} €`;
+}
+
+// Gráfico de abanico: banda entre el escenario bajista (percentil 10) y el
+// alcista (90), con el central (mediana) en medio. Colores por CSS para que
+// respete el tema claro/oscuro; los tres trazos se distinguen también por el
+// estilo de línea, no solo por el color.
+function graficoAbanicoHtml(mc) {
+  const W = 640;
+  const H = 280;
+  const mIzq = 64;
+  const mDer = 12;
+  const mSup = 12;
+  const mInf = 30;
+  const d90 = mc.duracion.alcista;
+  const ultimo = Number.isFinite(d90) ? Math.min(mc.anios, Math.max(10, d90 + 3)) : mc.anios;
+  const pts = mc.serie.filter((s) => s.anio <= ultimo);
+  const yMax = Math.max(...pts.map((s) => s.p90), 1) * 1.05;
+  const x = (anio) => mIzq + (anio / ultimo) * (W - mIzq - mDer);
+  const y = (v) => mSup + (1 - v / yMax) * (H - mSup - mInf);
+  const punto = (s, clave) => `${x(s.anio).toFixed(1)},${y(s[clave]).toFixed(1)}`;
+  const linea = (clave) => pts.map((s, i) => `${i ? "L" : "M"}${punto(s, clave)}`).join(" ");
+  const banda = `${pts.map((s, i) => `${i ? "L" : "M"}${punto(s, "p90")}`).join(" ")} ${[...pts].reverse().map((s) => `L${punto(s, "p10")}`).join(" ")} Z`;
+
+  const paso = ultimo <= 20 ? 5 : 10;
+  let ejeX = "";
+  for (let a = 0; a <= ultimo; a += paso) {
+    ejeX += `<line x1="${x(a)}" y1="${mSup}" x2="${x(a)}" y2="${H - mInf}" style="stroke:var(--border);stroke-width:1" />
+             <text x="${x(a)}" y="${H - 10}" text-anchor="middle" style="fill:var(--muted);font-size:11px">${a === 0 ? "hoy" : `año ${a}`}</text>`;
+  }
+  let ejeY = "";
+  for (let k = 0; k <= 4; k++) {
+    const v = (yMax * k) / 4;
+    ejeY += `<line x1="${mIzq}" y1="${y(v)}" x2="${W - mDer}" y2="${y(v)}" style="stroke:var(--border);stroke-width:1" />
+             <text x="${mIzq - 6}" y="${y(v) + 4}" text-anchor="end" style="fill:var(--muted);font-size:11px">${fmtCorto(v)}</text>`;
+  }
+
+  return `
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;margin-top:10px" role="img" aria-label="Abanico de escenarios del patrimonio año a año: bajista, central y alcista">
+      ${ejeX}${ejeY}
+      <path d="${banda}" style="fill:var(--brand-light);fill-opacity:0.2;stroke:none" />
+      <path d="${linea("p10")}" style="fill:none;stroke:var(--neg);stroke-width:2;stroke-dasharray:6 4" />
+      <path d="${linea("p90")}" style="fill:none;stroke:var(--pos);stroke-width:2;stroke-dasharray:2 4" />
+      <path d="${linea("p50")}" style="fill:none;stroke:var(--text);stroke-width:2.4" />
+    </svg>
+    <p class="muted" style="margin-top:4px"><span style="color:var(--neg)">- - Bajista</span> (1 de cada 10 futuros es peor) · <span style="color:var(--text)">— Central</span> (mediana) · <span style="color:var(--pos)">··· Alcista</span> (1 de cada 10 es mejor)</p>
+  `;
+}
+
+function duracionTexto(d, anios) {
+  return Number.isFinite(d) ? `${d} años` : `más de ${anios} años`;
+}
+
+function patrimonioEn(serie, anio, clave) {
+  const s = serie[anio];
+  return s && s[clave] > 0 ? fmtEUR(s[clave]) : "agotado";
+}
+
+function monteCarloHtml(mc, info) {
+  const probs = mc.probabilidades
+    .map((p) => {
+      const pct = p.prob * 100;
+      const clase = pct >= 90 ? "pos" : pct < 75 ? "neg" : "";
+      return `<div class="kpi-row"><span>Probabilidad de que el patrimonio dure ${p.horizonte} años</span><span class="${clase}"><strong>${fmtPct(pct)}</strong></span></div>`;
+    })
+    .join("");
+  const filaEsc = (nombre, clave, serieClave) =>
+    `<tr><td>${nombre}</td><td><strong>${duracionTexto(mc.duracion[clave], mc.anios)}</strong></td>${[10, 20, 30]
+      .map((a) => `<td>${patrimonioEn(mc.serie, a, serieClave)}</td>`)
+      .join("")}</tr>`;
+
+  return `
+    <h4 style="margin:22px 0 6px">Monte Carlo: ${mc.simulaciones.toLocaleString("es-ES")} futuros posibles</h4>
+    <p class="muted">Rentabilidad media ${fmtPct(info.rentabilidadPct)}, volatilidad ${fmtPct(mc.volatilidadPct)} ${info.volManual ? "(indicada por ti)" : "(media de tus clases de activo, sin descontar diversificación: prudente)"}, inflación ${fmtPct(info.inflacionPct)}.</p>
+    ${probs}
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Escenario</th><th>Dura</th><th>Patrimonio a los 10 años</th><th>A los 20 años</th><th>A los 30 años</th></tr></thead>
+      <tbody>
+        ${filaEsc("Bajista", "bajista", "p10")}
+        ${filaEsc("Central", "central", "p50")}
+        ${filaEsc("Alcista", "alcista", "p90")}
+      </tbody>
+    </table></div>
+    ${graficoAbanicoHtml(mc)}
+    <p class="muted">Cada futuro aplica una rentabilidad distinta cada año (distribución lognormal con la rentabilidad media y la volatilidad de arriba) y retira el gasto bruto de la cartera, creciendo con la inflación. Bajista = el 10 % de futuros peores; alcista = el 10 % mejores. El escenario central queda por debajo del cálculo determinista de más arriba porque la volatilidad resta rentabilidad compuesta. Importes nominales (sin descontar inflación). Los años de cada rentabilidad son independientes y sin «colas gordas»: un desplome como el de 2008 o una década perdida pueden ser peores que lo que genera este modelo, y la volatilidad por clase es un supuesto mío, no medida en tu cartera. Colores orientativos: verde ≥ 90 %, rojo &lt; 75 %. Semilla ${mc.semilla}.</p>
+    <div class="btn-row"><button type="button" class="link-btn" id="btn-mc-semilla">Simular otros ${MC_SIMULACIONES.toLocaleString("es-ES")} futuros (cambiar semilla)</button></div>
   `;
 }
 
@@ -465,6 +563,25 @@ export function renderSimuladores(container) {
           </label>
           <p class="muted">Las reducciones del alquiler de vivienda dependen de la fecha del contrato y de la zona, y el Real Decreto-ley 29/2026 (octubre) las ha modificado: por eso empiezan a 0 %. Consúltalo con tu gestor. Las escalas del IRPF se editan en Ajustes.</p>
         </details>
+        <details class="supuestos">
+          <summary>Supuestos del Monte Carlo (volatilidad)</summary>
+          <label>Volatilidad anual de la renta variable (%)
+            <input name="mcVolRentaVariable" type="number" step="any" min="0" value="${meta.jubilacionMcVolRentaVariable ?? DEFAULT_MC_VOLATILIDADES_PCT.renta_variable}" />
+          </label>
+          <label>Volatilidad anual de los fondos mixtos (%)
+            <input name="mcVolMixto" type="number" step="any" min="0" value="${meta.jubilacionMcVolMixto ?? DEFAULT_MC_VOLATILIDADES_PCT.mixto}" />
+          </label>
+          <label>Volatilidad anual de la renta fija (%) — si es monetaria, mucho menos
+            <input name="mcVolRentaFija" type="number" step="any" min="0" value="${meta.jubilacionMcVolRentaFija ?? DEFAULT_MC_VOLATILIDADES_PCT.renta_fija}" />
+          </label>
+          <label>Volatilidad anual de la liquidez (%)
+            <input name="mcVolLiquidez" type="number" step="any" min="0" value="${meta.jubilacionMcVolLiquidez ?? DEFAULT_MC_VOLATILIDADES_PCT.liquidez}" />
+          </label>
+          <label>Volatilidad de toda la cartera (%) — en blanco = media ponderada por tus pesos (<span id="vol-defecto">—</span>)
+            <input name="mcVolCartera" type="number" step="any" min="0" value="${meta.jubilacionMcVolCartera ?? ""}" />
+          </label>
+          <p class="muted">La volatilidad es cuánto se mueve la rentabilidad de un año a otro. Son valores orientativos míos, no medidos sobre tu cartera; la media ponderada es prudente porque no descuenta el efecto de diversificar.</p>
+        </details>
         <div class="btn-row">
           <button type="submit">Calcular</button>
         </div>
@@ -549,6 +666,13 @@ export function renderSimuladores(container) {
       plusvaliaPct: numOpcional(fd, "plusvaliaPct"),
       gastosAlquilerPct: numOpcional(fd, "gastosAlquilerPct") ?? 0,
       reduccionAlquilerPct: numOpcional(fd, "reduccionAlquilerPct") ?? 0,
+      mcVols: {
+        renta_variable: numOpcional(fd, "mcVolRentaVariable") ?? DEFAULT_MC_VOLATILIDADES_PCT.renta_variable,
+        mixto: numOpcional(fd, "mcVolMixto") ?? DEFAULT_MC_VOLATILIDADES_PCT.mixto,
+        renta_fija: numOpcional(fd, "mcVolRentaFija") ?? DEFAULT_MC_VOLATILIDADES_PCT.renta_fija,
+        liquidez: numOpcional(fd, "mcVolLiquidez") ?? DEFAULT_MC_VOLATILIDADES_PCT.liquidez,
+      },
+      mcVolCartera: numOpcional(fd, "mcVolCartera"),
     };
   }
 
@@ -569,6 +693,11 @@ export function renderSimuladores(container) {
       jubilacionPlusvaliaPct: params.plusvaliaPct,
       jubilacionGastosAlquilerPct: params.gastosAlquilerPct,
       jubilacionReduccionAlquilerPct: params.reduccionAlquilerPct,
+      jubilacionMcVolRentaVariable: params.mcVols.renta_variable,
+      jubilacionMcVolMixto: params.mcVols.mixto,
+      jubilacionMcVolRentaFija: params.mcVols.renta_fija,
+      jubilacionMcVolLiquidez: params.mcVols.liquidez,
+      jubilacionMcVolCartera: params.mcVolCartera,
     });
     const sim = simulacionRetirada(params);
     const duracion = duracionPatrimonio({
@@ -578,8 +707,30 @@ export function renderSimuladores(container) {
       incluirAlquileres: params.incluirAlquileres,
       patrimonioInicial: sim.patrimonioBase,
     });
-    resultadoDiv.innerHTML = resultadoHtml(duracion, sim);
+    const volDefecto = volatilidadCartera({ incluirPlanes: params.incluirPlanes, incluirLiquidez: params.incluirLiquidez, volatilidadesPct: params.mcVols });
+    const mc = simulacionMonteCarlo({
+      patrimonioInicial: sim.patrimonioBase,
+      retiradaAnual: sim.retirada,
+      rentabilidadPct: params.rentabilidadPct,
+      inflacionPct: params.inflacionPct,
+      volatilidadPct: params.mcVolCartera ?? volDefecto.volPct,
+      semilla: store.get().meta.jubilacionMcSemilla ?? DEFAULT_MC_SEMILLA,
+    });
+    resultadoDiv.innerHTML =
+      resultadoHtml(duracion, sim) +
+      monteCarloHtml(mc, {
+        volManual: params.mcVolCartera != null,
+        rentabilidadPct: params.rentabilidadPct,
+        inflacionPct: params.inflacionPct,
+      });
   }
+
+  // Otra semilla = otros 10.000 futuros distintos (el botón se repinta con el resultado).
+  resultadoDiv.addEventListener("click", (ev) => {
+    if (!ev.target.closest("#btn-mc-semilla")) return;
+    store.updateMeta({ jubilacionMcSemilla: Math.floor(Math.random() * 2147483647) });
+    calcularYMostrar();
+  });
 
   // Ayuda en vivo: patrimonio real con las casillas marcadas y gasto que
   // saldría con la regla, para que se vea el valor por defecto antes de calcular.
@@ -587,6 +738,8 @@ export function renderSimuladores(container) {
   function refrescarAyuda() {
     const p = leerParametros();
     const s = simulacionRetirada({ ...p, gastoAnual: null });
+    const vol = volatilidadCartera({ incluirPlanes: p.incluirPlanes, incluirLiquidez: p.incluirLiquidez, volatilidadesPct: p.mcVols });
+    container.querySelector("#vol-defecto").textContent = fmtPct(vol.volPct);
     ayudaPatrimonio.textContent = `Patrimonio financiero real con estas casillas: ${fmtEUR(s.patrimonioReal)}. Con la regla del ${fmtPct(s.tasaRetiradaPct)}${s.alquiler > 0 ? " más el alquiler" : ""}, el gasto bruto anual sería ${fmtEUR(s.gastoBruto)} (${fmtEUR(s.gastoBruto / 12)}/mes).`;
   }
   form.addEventListener("input", refrescarAyuda);

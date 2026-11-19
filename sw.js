@@ -1,4 +1,4 @@
-const CACHE = "gestor-patrimonial-v76";
+const CACHE = "gestor-patrimonial-v77";
 const ASSETS = [
   "./",
   "./index.html",
@@ -21,6 +21,7 @@ const ASSETS = [
   "./js/alerts.js",
   "./js/decisions.js",
   "./js/simuladores.js",
+  "./js/montecarlo.js",
   "./js/xray.js",
   "./js/worldmap.js",
   "./js/drive.js",

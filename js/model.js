@@ -119,6 +119,12 @@ export const DEFAULT_MINIMO_PERSONAL_AUTONOMICO = 5789;
 export const DEFAULT_TASA_RETIRADA_PCT = 4;
 export const DEFAULT_INTERES_LIQUIDEZ_PCT = 2;
 
+// Monte Carlo del simulador: volatilidad anual SUPUESTA por clase de activo
+// (valores orientativos, no medidos sobre tu cartera; editables) y semilla del
+// generador aleatorio (fija para que el resultado no cambie al recalcular).
+export const DEFAULT_MC_VOLATILIDADES_PCT = { renta_variable: 16, mixto: 8, renta_fija: 3, liquidez: 0.5 };
+export const DEFAULT_MC_SEMILLA = 20261119;
+
 // Impuesto sobre el Patrimonio — escala autonómica de Galicia (2025-2026):
 // misma tarifa que la estatal subsidiaria, con una bonificación general del
 // 50% sobre la cuota íntegra. Mínimo exento: 700.000 € por contribuyente
@@ -218,6 +224,14 @@ export function emptyData() {
       jubilacionPlusvaliaPct: null, // null = la de tu cartera hoy
       jubilacionGastosAlquilerPct: 0,
       jubilacionReduccionAlquilerPct: 0,
+      // Monte Carlo: volatilidad por clase, volatilidad de cartera (null = media
+      // ponderada por tus pesos) y semilla.
+      jubilacionMcVolRentaVariable: DEFAULT_MC_VOLATILIDADES_PCT.renta_variable,
+      jubilacionMcVolMixto: DEFAULT_MC_VOLATILIDADES_PCT.mixto,
+      jubilacionMcVolRentaFija: DEFAULT_MC_VOLATILIDADES_PCT.renta_fija,
+      jubilacionMcVolLiquidez: DEFAULT_MC_VOLATILIDADES_PCT.liquidez,
+      jubilacionMcVolCartera: null,
+      jubilacionMcSemilla: DEFAULT_MC_SEMILLA,
       tramosGeneralEstatal: DEFAULT_TRAMOS_GENERAL_ESTATAL,
       tramosGeneralAutonomica: DEFAULT_TRAMOS_GENERAL_AUTONOMICA,
       minimoPersonalEstatal: DEFAULT_MINIMO_PERSONAL_ESTATAL,
