@@ -2,7 +2,16 @@ import { store } from "./store.js";
 import { esModoFamilia } from "./modo.js";
 import { renderAjustesFamilia } from "./familia.js";
 import { changePin, removePin } from "./lock.js";
-import { ASSET_CLASSES, DEFAULT_TRAMOS_AHORRO, DEFAULT_TRAMOS_PATRIMONIO, DEFAULT_TRAMOS_ITP_VIVIENDA } from "./model.js";
+import {
+  ASSET_CLASSES,
+  DEFAULT_TRAMOS_AHORRO,
+  DEFAULT_TRAMOS_PATRIMONIO,
+  DEFAULT_TRAMOS_ITP_VIVIENDA,
+  DEFAULT_TRAMOS_GENERAL_ESTATAL,
+  DEFAULT_TRAMOS_GENERAL_AUTONOMICA,
+  DEFAULT_MINIMO_PERSONAL_ESTATAL,
+  DEFAULT_MINIMO_PERSONAL_AUTONOMICO,
+} from "./model.js";
 import {
   conectar as conectarDrive,
   desconectar as desconectarDrive,
@@ -88,6 +97,26 @@ export function renderSettings(container) {
       <button type="button" id="btn-add-tramo" class="link-btn">+ Añadir tramo</button>
       <div class="btn-row" style="margin-top:10px">
         <button id="save-tramos">Guardar tramos</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Fiscalidad — IRPF base general (alquileres y planes de pensiones)</h3>
+      <p class="muted">Se usan en Simuladores para estimar el neto mensual: el rescate de planes de pensiones y los alquileres tributan en la base general, con la escala estatal más la autonómica (por defecto, Galicia 2026). Deja "Hasta" en blanco en el tramo que cubre el resto. El mínimo personal no reduce la renta: se resta de la cuota la que saldría de aplicarle la escala.</p>
+      <label>Mínimo personal estatal (€)
+        <input id="minimo-personal-estatal" type="number" step="any" min="0" value="${data.meta.minimoPersonalEstatal ?? DEFAULT_MINIMO_PERSONAL_ESTATAL}" />
+      </label>
+      <label>Mínimo personal autonómico (€)
+        <input id="minimo-personal-autonomico" type="number" step="any" min="0" value="${data.meta.minimoPersonalAutonomico ?? DEFAULT_MINIMO_PERSONAL_AUTONOMICO}" />
+      </label>
+      <p class="muted" style="margin-top:12px">Escala estatal:</p>
+      <div id="tramos-general-est-rows"></div>
+      <button type="button" id="btn-add-tramo-general-est" class="link-btn">+ Añadir tramo</button>
+      <p class="muted" style="margin-top:12px">Escala autonómica:</p>
+      <div id="tramos-general-aut-rows"></div>
+      <button type="button" id="btn-add-tramo-general-aut" class="link-btn">+ Añadir tramo</button>
+      <div class="btn-row" style="margin-top:10px">
+        <button id="save-general">Guardar</button>
       </div>
     </section>
 
@@ -311,6 +340,58 @@ export function renderSettings(container) {
       return;
     }
     store.updateMeta({ tramosAhorro: tramos });
+    alert("Guardado.");
+  });
+
+  // Editor de tramos reutilizable para las dos escalas de la base general.
+  function montarEditorTramos(contenedor, botonAnadir, tramosIniciales) {
+    function fila(t) {
+      const div = document.createElement("div");
+      div.className = "btn-row tramo-row";
+      div.innerHTML = `
+        <input class="tramo-hasta" type="number" step="any" min="0" placeholder="Hasta (€, vacío = sin límite)" value="${t.hasta ?? ""}" />
+        <input class="tramo-pct" type="number" step="any" min="0" max="100" placeholder="%" value="${t.pct ?? ""}" style="max-width:90px" />
+        <button type="button" class="link-btn danger tramo-remove">quitar</button>
+      `;
+      div.querySelector(".tramo-remove").addEventListener("click", () => div.remove());
+      contenedor.appendChild(div);
+    }
+    tramosIniciales.forEach(fila);
+    botonAnadir.addEventListener("click", () => fila({ hasta: "", pct: "" }));
+    return () =>
+      [...contenedor.querySelectorAll(".tramo-row")]
+        .map((row) => ({
+          hasta: row.querySelector(".tramo-hasta").value.trim() === "" ? null : Number(row.querySelector(".tramo-hasta").value),
+          pct: Number(row.querySelector(".tramo-pct").value),
+        }))
+        .filter((t) => !isNaN(t.pct));
+  }
+
+  const leerTramosGeneralEst = montarEditorTramos(
+    container.querySelector("#tramos-general-est-rows"),
+    container.querySelector("#btn-add-tramo-general-est"),
+    data.meta.tramosGeneralEstatal?.length ? data.meta.tramosGeneralEstatal : DEFAULT_TRAMOS_GENERAL_ESTATAL
+  );
+  const leerTramosGeneralAut = montarEditorTramos(
+    container.querySelector("#tramos-general-aut-rows"),
+    container.querySelector("#btn-add-tramo-general-aut"),
+    data.meta.tramosGeneralAutonomica?.length ? data.meta.tramosGeneralAutonomica : DEFAULT_TRAMOS_GENERAL_AUTONOMICA
+  );
+
+  container.querySelector("#save-general").addEventListener("click", () => {
+    const minimoEstatal = Number(container.querySelector("#minimo-personal-estatal").value);
+    const minimoAutonomico = Number(container.querySelector("#minimo-personal-autonomico").value);
+    if (isNaN(minimoEstatal) || minimoEstatal < 0 || isNaN(minimoAutonomico) || minimoAutonomico < 0) {
+      alert("Introduce mínimos personales válidos.");
+      return;
+    }
+    const estatal = leerTramosGeneralEst();
+    const autonomica = leerTramosGeneralAut();
+    if (!estatal.length || !autonomica.length) {
+      alert("Cada escala necesita al menos un tramo con su porcentaje.");
+      return;
+    }
+    store.updateMeta({ minimoPersonalEstatal: minimoEstatal, minimoPersonalAutonomico: minimoAutonomico, tramosGeneralEstatal: estatal, tramosGeneralAutonomica: autonomica });
     alert("Guardado.");
   });
 

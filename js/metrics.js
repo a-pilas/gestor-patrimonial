@@ -7,6 +7,13 @@ import {
   COST_FIELDS,
   XRAY_REVISION_MESES,
   GEO_SUMA_TOLERANCIA,
+  DEFAULT_TRAMOS_AHORRO,
+  DEFAULT_TRAMOS_GENERAL_ESTATAL,
+  DEFAULT_TRAMOS_GENERAL_AUTONOMICA,
+  DEFAULT_MINIMO_PERSONAL_ESTATAL,
+  DEFAULT_MINIMO_PERSONAL_AUTONOMICO,
+  DEFAULT_TASA_RETIRADA_PCT,
+  DEFAULT_INTERES_LIQUIDEZ_PCT,
 } from "./model.js";
 import { store, latestPositionsByAssetEntity, latestLiabilityPositions, assetById, entityById } from "./store.js";
 
@@ -782,15 +789,17 @@ export function alquilerAnualTotal() {
 
 // Simulación año a año de cuánto dura el patrimonio FINANCIERO (los
 // inmuebles no se venden ni se cuentan como fondo gastable, solo aportan su
-// alquiler si se activa) a un ritmo de gasto anual que crece con la
-// inflación, con una rentabilidad anual constante asumida. Es una
-// simplificación deliberada: no modela volatilidad de mercado ni riesgo de
-// secuencia de rentabilidad, fiscalidad sobre los reembolsos, ni pensión
-// pública. Corta a los 60 años si el patrimonio no se agota antes.
+// alquiler si se activa) a un ritmo de gasto anual BRUTO (impuestos
+// incluidos, ver simulacionRetirada) que crece con la inflación, con una
+// rentabilidad anual constante asumida. Es una simplificación deliberada: no
+// modela volatilidad de mercado ni riesgo de secuencia de rentabilidad, ni
+// pensión pública. Corta a los 60 años si el patrimonio no se agota antes.
+// `patrimonioInicial` es opcional: si no se indica, se usa todo el financiero.
 const DURACION_MAX_ANIOS = 60;
 
-export function duracionPatrimonio({ gastoAnual, rentabilidadPct, inflacionPct, incluirAlquileres }) {
-  const patrimonioInicial = financialBreakdownBySubclass().total;
+export function duracionPatrimonio({ gastoAnual, rentabilidadPct, inflacionPct, incluirAlquileres, patrimonioInicial: patrimonioParam }) {
+  const patrimonioInicial =
+    patrimonioParam != null && patrimonioParam !== "" && !isNaN(Number(patrimonioParam)) ? Number(patrimonioParam) : financialBreakdownBySubclass().total;
   const alquilerAnual = incluirAlquileres ? alquilerAnualTotal() : 0;
   const rentabilidad = (Number(rentabilidadPct) || 0) / 100;
   const inflacion = (Number(inflacionPct) || 0) / 100;
@@ -809,6 +818,198 @@ export function duracionPatrimonio({ gastoAnual, rentabilidadPct, inflacionPct, 
     serie.push({ anio, patrimonio });
   }
   return { patrimonioInicial, alquilerAnual, aniosDuracion: DURACION_MAX_ANIOS, agotado: false, serie };
+}
+
+// Dividendos y cupones cobrados (brutos) en los últimos 12 meses, según los
+// Movimientos registrados — base de la estimación de impuestos "a fecha de hoy".
+export function dividendosUltimos12Meses() {
+  const data = store.get();
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const hasta = new Date();
+  const desde = new Date(hasta);
+  desde.setFullYear(desde.getFullYear() - 1);
+  const d0 = iso(desde);
+  const d1 = iso(hasta);
+  return data.movements.filter((m) => m.type === "dividendo" && m.date > d0 && m.date <= d1).reduce((s, m) => s + (Number(m.amount) || 0), 0);
+}
+
+// Patrimonio financiero partido en los tres bloques que tributan distinto al
+// retirar dinero: inversión (fondos, ETF, acciones: solo tributa la
+// plusvalía), liquidez (cuentas y depósitos: solo tributan los intereses) y
+// planes de pensiones (el rescate tributa entero como rendimiento del
+// trabajo). `plusvaliaPct` = plusvalía latente sobre el valor de la inversión
+// (la misma aportado-vs-valor que usa Inicio; nunca negativa ni > 100).
+// Devuelve también el total de cada bloque aunque se excluya, para mostrarlo.
+export function composicionFinancieraParaRetirada({ incluirPlanes = true, incluirLiquidez = true } = {}) {
+  let inversion = 0;
+  let liquidez = 0;
+  let planes = 0;
+  let latenteInversion = 0;
+  let liquidezTotal = 0;
+  let planesTotal = 0;
+  for (const { p, asset } of financialPositions()) {
+    const value = valueOfPosition(p);
+    if (LIQUIDEZ_OPERATIVA_SUBCLASSES.includes(asset.subclass)) {
+      liquidezTotal += value;
+      if (incluirLiquidez) liquidez += value;
+      continue;
+    }
+    if (asset.subclass === "Plan de pensiones") {
+      planesTotal += value;
+      if (incluirPlanes) planes += value;
+      continue;
+    }
+    inversion += value;
+    latenteInversion += value - aportadoNetoPorActivo(asset.id);
+  }
+  const plusvaliaPct = inversion > 0 ? Math.min(100, Math.max(0, (latenteInversion / inversion) * 100)) : 0;
+  return {
+    inversion,
+    liquidez,
+    planes,
+    total: inversion + liquidez + planes,
+    liquidezTotal,
+    planesTotal,
+    totalFinanciero: inversion + liquidezTotal + planesTotal,
+    plusvaliaPct,
+    dividendos12m: dividendosUltimos12Meses(),
+  };
+}
+
+// "Regla del X %" + estimación del neto mensual disponible con desglose de
+// impuestos, a fecha de hoy y con la normativa vigente (editable en Ajustes).
+//
+// Definiciones (acordadas con el usuario):
+//  - Gasto bruto anual = lo que se quiere tener antes de impuestos: por
+//    defecto, tasa × patrimonio de partida (la regla se aplica a la cartera)
+//    + el alquiler si se incluye. La RETIRADA de la cartera es el gasto menos
+//    el alquiler: eso es lo que sale del patrimonio en el primer año y lo que
+//    usa duracionPatrimonio. Los impuestos se pagan de ese gasto bruto.
+//  - La retirada sale a prorrata de lo que hay (inversión / liquidez /
+//    planes). En inversión solo tributa la plusvalía incluida (% de la cartera
+//    hoy, o el que se indique); en planes tributa todo el rescate en la base
+//    general; en liquidez solo los intereses (tipo supuesto).
+//  - Base del ahorro = plusvalía realizada + dividendos de los últimos 12
+//    meses + intereses de la liquidez. Base general = alquiler neto (tras
+//    gastos y reducción indicados, por defecto 0 %) + rescate de planes.
+//  - Reparto a partes iguales entre `contribuyentes` (gananciales, como el
+//    Impuesto sobre el Patrimonio). El mínimo personal se resta de la cuota
+//    general; si no cabe en la base general, el exceso reduce la base del
+//    ahorro (art. 63 LIRPF / manual de la AEAT).
+//  - Se resta además el Impuesto sobre el Patrimonio estimado hoy (Fiscalidad).
+// No incluye pensión pública, otras deducciones, ni cambios futuros de
+// normativa o de composición de la cartera: es una foto de hoy.
+export function simulacionRetirada(params = {}) {
+  const meta = store.get().meta;
+  const num = (v, def) => (v === null || v === undefined || v === "" || isNaN(Number(v)) ? def : Number(v));
+
+  const incluirPlanes = params.incluirPlanes !== false;
+  const incluirLiquidez = params.incluirLiquidez !== false;
+  const incluirAlquileres = !!params.incluirAlquileres;
+  const comp = composicionFinancieraParaRetirada({ incluirPlanes, incluirLiquidez });
+
+  const patrimonioReal = comp.total;
+  const personalizado = params.patrimonioInicial !== null && params.patrimonioInicial !== undefined && params.patrimonioInicial !== "";
+  const patrimonioBase = personalizado ? Math.max(0, num(params.patrimonioInicial, 0)) : patrimonioReal;
+  const k = patrimonioReal > 0 ? patrimonioBase / patrimonioReal : 0;
+
+  const tasaRetiradaPct = Math.max(0, num(params.tasaRetiradaPct, DEFAULT_TASA_RETIRADA_PCT));
+  const alquiler = incluirAlquileres ? alquilerAnualTotal() : 0;
+  const retiradaRegla = (patrimonioBase * tasaRetiradaPct) / 100;
+  const gastoManual = params.gastoAnual !== null && params.gastoAnual !== undefined && params.gastoAnual !== "" && !isNaN(Number(params.gastoAnual));
+  const gastoBruto = gastoManual ? Number(params.gastoAnual) : retiradaRegla + alquiler;
+  const retirada = Math.max(0, gastoBruto - alquiler);
+  const tasaEfectivaPct = patrimonioBase > 0 ? (retirada / patrimonioBase) * 100 : null;
+
+  const parte = (v) => (patrimonioReal > 0 ? v / patrimonioReal : 0);
+  const reparto = { inversion: parte(comp.inversion), liquidez: parte(comp.liquidez), planes: parte(comp.planes) };
+  const retiradaInversion = retirada * reparto.inversion;
+  const retiradaPlanes = retirada * reparto.planes;
+
+  const n = Math.max(1, Math.round(num(params.contribuyentes, 2)));
+  const plusvaliaPct = Math.min(100, Math.max(0, num(params.plusvaliaPct, comp.plusvaliaPct)));
+  const interesLiquidezPct = Math.max(0, num(params.interesLiquidezPct, DEFAULT_INTERES_LIQUIDEZ_PCT));
+  const gastosAlquilerPct = Math.min(100, Math.max(0, num(params.gastosAlquilerPct, 0)));
+  const reduccionAlquilerPct = Math.min(100, Math.max(0, num(params.reduccionAlquilerPct, 0)));
+  const otrasRentas = Math.max(0, num(params.otrasRentasGeneral, 0));
+
+  // --- Base general (por contribuyente) ---
+  const tramosEst = meta.tramosGeneralEstatal?.length ? meta.tramosGeneralEstatal : DEFAULT_TRAMOS_GENERAL_ESTATAL;
+  const tramosAut = meta.tramosGeneralAutonomica?.length ? meta.tramosGeneralAutonomica : DEFAULT_TRAMOS_GENERAL_AUTONOMICA;
+  const minEst = num(meta.minimoPersonalEstatal, DEFAULT_MINIMO_PERSONAL_ESTATAL);
+  const minAut = num(meta.minimoPersonalAutonomico, DEFAULT_MINIMO_PERSONAL_AUTONOMICO);
+  const cuotaGeneralPP = (base) =>
+    Math.max(0, cuotaProgresiva(base, tramosEst) - cuotaProgresiva(minEst, tramosEst)) +
+    Math.max(0, cuotaProgresiva(base, tramosAut) - cuotaProgresiva(minAut, tramosAut));
+  const cuotaGeneral = (baseTotal) => n * cuotaGeneralPP(Math.max(0, baseTotal) / n);
+
+  const alquilerNeto = alquiler * (1 - gastosAlquilerPct / 100) * (1 - reduccionAlquilerPct / 100);
+  const baseGeneral = otrasRentas + alquilerNeto + retiradaPlanes;
+  const c0 = cuotaGeneral(otrasRentas);
+  const c1 = cuotaGeneral(otrasRentas + alquilerNeto);
+  const c2 = cuotaGeneral(baseGeneral);
+  const irpfAlquiler = c1 - c0;
+  const irpfPlanes = c2 - c1;
+
+  // --- Base del ahorro (por contribuyente) ---
+  const plusvaliaRealizada = (retiradaInversion * plusvaliaPct) / 100;
+  const dividendos = comp.dividendos12m * k;
+  const intereses = (comp.liquidez * k * interesLiquidezPct) / 100;
+  const baseAhorro = plusvaliaRealizada + dividendos + intereses;
+  const tramosAhorro = meta.tramosAhorro?.length ? meta.tramosAhorro : DEFAULT_TRAMOS_AHORRO;
+  const baseGeneralPP = baseGeneral / n;
+  // Parte del mínimo personal que la base general no llega a absorber.
+  const excesoMinimoPP = (Math.max(0, minEst - baseGeneralPP) + Math.max(0, minAut - baseGeneralPP)) / 2;
+  const baseAhorroPP = baseAhorro / n;
+  const cuotaAhorro = n * Math.max(0, cuotaProgresiva(baseAhorroPP, tramosAhorro) - cuotaProgresiva(excesoMinimoPP, tramosAhorro));
+
+  const patrimonioImpuesto = cuotaPatrimonioEstimada().cuotaFinalTotal;
+  const impuestosIrpf = cuotaAhorro + irpfAlquiler + irpfPlanes;
+  const impuestosTotales = impuestosIrpf + patrimonioImpuesto;
+  const netoAnual = gastoBruto - impuestosTotales;
+
+  const avisos = [];
+  if (patrimonioReal <= 0) avisos.push("No hay patrimonio financiero con las casillas marcadas: la simulación parte de 0 €.");
+  if (gastoManual && gastoBruto < alquiler) avisos.push("El gasto indicado es menor que el alquiler: no se retira nada de la cartera.");
+  if (reparto.planes > 0 && personalizado) avisos.push("Con un patrimonio de partida distinto del real se mantiene la misma proporción de fondos, planes y liquidez que tienes hoy.");
+
+  return {
+    patrimonioReal,
+    patrimonioBase,
+    personalizado,
+    incluirPlanes,
+    incluirLiquidez,
+    comp,
+    tasaRetiradaPct,
+    retiradaRegla,
+    gastoManual,
+    gastoBruto,
+    retirada,
+    retiradaInversion,
+    retiradaPlanes,
+    tasaEfectivaPct,
+    alquiler,
+    alquilerNeto,
+    reparto,
+    contribuyentes: n,
+    plusvaliaPct,
+    plusvaliaRealizada,
+    dividendos,
+    intereses,
+    interesLiquidezPct,
+    baseAhorro,
+    cuotaAhorro,
+    baseGeneral,
+    irpfAlquiler,
+    irpfPlanes,
+    patrimonioImpuesto,
+    impuestosIrpf,
+    impuestosTotales,
+    tipoEfectivoPct: gastoBruto > 0 ? (impuestosTotales / gastoBruto) * 100 : null,
+    netoAnual,
+    netoMensual: netoAnual / 12,
+    avisos,
+  };
 }
 
 // Simula la compra de una propiedad adicional financiada con hipoteca a

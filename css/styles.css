@@ -167,6 +167,8 @@ body {
 .herencia:first-of-type { border-top: none; padding-top: 0; }
 .herencia details { margin-top: 8px; }
 .herencia summary { cursor: pointer; }
+.supuestos { margin: 8px 0; }
+.supuestos summary { cursor: pointer; font-weight: 600; margin-bottom: 6px; }
 .pos { color: var(--pos); }
 .neg { color: var(--neg); }
 .muted { color: var(--muted); font-size: 0.85rem; }

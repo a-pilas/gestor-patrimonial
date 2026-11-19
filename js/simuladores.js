@@ -1,6 +1,13 @@
 import { store } from "./store.js";
-import { duracionPatrimonio, alquilerAnualTotal, financialBreakdownBySubclass, simulacionCompraPropiedad, evolucionHerencias } from "./metrics.js";
-import { uid } from "./model.js";
+import {
+  duracionPatrimonio,
+  alquilerAnualTotal,
+  simulacionCompraPropiedad,
+  evolucionHerencias,
+  simulacionRetirada,
+  composicionFinancieraParaRetirada,
+} from "./metrics.js";
+import { uid, DEFAULT_TASA_RETIRADA_PCT, DEFAULT_INTERES_LIQUIDEZ_PCT } from "./model.js";
 import { openModal } from "./modal.js";
 import { esModoFamilia } from "./modo.js";
 
@@ -110,7 +117,43 @@ function resultadoCompraHtml(r) {
   `;
 }
 
-function resultadoHtml(resultado) {
+function fmtPct2(n) {
+  if (n == null || isNaN(n)) return "—";
+  return `${Number(n).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`;
+}
+
+// Desglose del gasto bruto → neto mensual (simulacionRetirada, en metrics.js).
+function netoMensualHtml(s) {
+  const fila = (etiqueta, valor, clase = "") => `<div class="kpi-row"><span>${etiqueta}</span><span class="${clase}">${valor}</span></div>`;
+  const menos = (valor) => (valor > 0.5 ? `−${fmtEUR(valor)}` : fmtEUR(0));
+  const pctReparto = (x) => fmtPct(x * 100);
+  const avisos = s.avisos.map((a) => `<p class="muted">⚠ ${esc(a)}</p>`).join("");
+
+  const detalleAhorro = `plusvalías de fondos ${fmtEUR(s.plusvaliaRealizada)} + dividendos ${fmtEUR(s.dividendos)} + intereses ${fmtEUR(s.intereses)}`;
+
+  return `
+    <h4 style="margin:18px 0 6px">Neto mensual disponible (estimación a fecha de hoy)</h4>
+    ${fila(
+      `Gasto bruto anual <span class="muted">(retirada de la cartera ${fmtEUR(s.retirada)}${s.alquiler > 0 ? ` + alquiler ${fmtEUR(s.alquiler)}` : ""})</span>`,
+      `<strong>${fmtEUR(s.gastoBruto)}</strong>`
+    )}
+    ${fila(
+      `IRPF base del ahorro <span class="muted">(${detalleAhorro})</span>`,
+      menos(s.cuotaAhorro),
+      "neg"
+    )}
+    ${s.alquiler > 0 ? fila(`IRPF alquileres <span class="muted">(base general)</span>`, menos(s.irpfAlquiler), "neg") : ""}
+    ${s.reparto.planes > 0 ? fila(`IRPF rescate de planes de pensiones <span class="muted">(base general: ${fmtEUR(s.retiradaPlanes)} rescatados)</span>`, menos(s.irpfPlanes), "neg") : ""}
+    ${fila(`Impuesto sobre el Patrimonio <span class="muted">(estimado hoy, ver Fiscalidad)</span>`, menos(s.patrimonioImpuesto), "neg")}
+    ${fila(`Neto anual`, `<strong>${fmtEUR(s.netoAnual)}</strong>`)}
+    ${fila(`<strong>Neto mensual disponible</strong>`, `<strong class="${s.netoMensual < 0 ? "neg" : "pos"}">${fmtEUR(s.netoMensual)}</strong>`)}
+    ${fila(`Impuestos totales sobre el gasto bruto`, `${fmtEUR(s.impuestosTotales)} (${fmtPct(s.tipoEfectivoPct)})`)}
+    ${avisos}
+    <p class="muted">La retirada sale a prorrata de lo que tienes: ${pctReparto(s.reparto.inversion)} fondos/ETF/acciones, ${pctReparto(s.reparto.planes)} planes de pensiones, ${pctReparto(s.reparto.liquidez)} liquidez. En fondos solo tributa la parte de plusvalía (${fmtPct(s.plusvaliaPct)} de lo retirado); en planes de pensiones tributa todo el rescate como rendimiento del trabajo (base general); en cuentas y depósitos, solo los intereses (supuesto ${fmtPct(s.interesLiquidezPct)} anual). Dividendos: los de los últimos 12 meses registrados. Reparto a partes iguales entre ${s.contribuyentes} contribuyente${s.contribuyentes > 1 ? "s" : ""}, con la escala del ahorro y la general de Galicia de Ajustes (el alquiler se grava sin reducción ni gastos salvo que los indiques en los supuestos). No incluye pensión pública, deducciones personales distintas del mínimo, ni cambios futuros de normativa: es una foto de hoy, aproximada y no sustituye a tu declaración.</p>
+  `;
+}
+
+function resultadoHtml(resultado, sim) {
   const maxValue = Math.max(...resultado.serie.map((s) => s.patrimonio), 1);
   const bars = resultado.serie
     .map(
@@ -126,13 +169,17 @@ function resultadoHtml(resultado) {
 
   return `
     <div class="kpi-row">
-      <span>Patrimonio financiero de partida</span><span>${fmtEUR(resultado.patrimonioInicial)}</span>
+      <span>Patrimonio financiero de partida${sim.personalizado ? ` <span class="muted">(el real con tus casillas es ${fmtEUR(sim.patrimonioReal)})</span>` : ""}</span><span>${fmtEUR(sim.patrimonioBase)}</span>
+    </div>
+    <div class="kpi-row">
+      <span>Retirada anual de la cartera${sim.gastoManual ? " (según tu gasto indicado)" : ` (regla del ${fmtPct(sim.tasaRetiradaPct)})`}</span><span>${fmtEUR(sim.retirada)} · ${fmtPct2(sim.tasaEfectivaPct)} del patrimonio</span>
     </div>
     ${resultado.alquilerAnual > 0 ? `<div class="kpi-row"><span>Ingreso por alquiler incluido</span><span class="pos">${fmtEUR(resultado.alquilerAnual)}/año</span></div>` : ""}
     <div class="kpi-row">
       <span><strong>${resultado.agotado ? "El patrimonio se agota en" : "Aguanta más de"}</strong></span>
       <span><strong>${resultado.aniosDuracion} años</strong></span>
     </div>
+    ${netoMensualHtml(sim)}
     <div class="evo-chart">${bars}</div>
   `;
 }
@@ -352,8 +399,8 @@ function abrirFormularioHerencia(editing, guardar, listaActual) {
 export function renderSimuladores(container) {
   const data = store.get();
   const meta = data.meta;
-  const patrimonioInicial = financialBreakdownBySubclass().total;
   const alquiler = alquilerAnualTotal();
+  const compTotal = composicionFinancieraParaRetirada();
   const tipoHipotecaGuardado = meta.compraPropiedadTipoHipoteca || "fija";
 
   container.innerHTML = `
@@ -363,11 +410,29 @@ export function renderSimuladores(container) {
 
     <section class="card">
       <h3>¿Cuánto dura mi patrimonio?</h3>
-      <p class="muted">Simulación simplificada: rentabilidad anual constante (sin volatilidad de mercado ni riesgo de secuencia de rentabilidad), gasto que crece con la inflación, sin fiscalidad sobre los reembolsos ni pensión pública. Parte de tu patrimonio financiero actual (${fmtEUR(patrimonioInicial)}) — los inmuebles no se venden, solo aportan su alquiler si lo activas.</p>
+      <p class="muted">Simulación simplificada: rentabilidad anual constante (sin volatilidad de mercado ni riesgo de secuencia de rentabilidad) y gasto que crece con la inflación, sin pensión pública. Parte de tu patrimonio financiero (los inmuebles no se venden, solo aportan su alquiler si lo activas). Si dejas el gasto en blanco se aplica la regla de retirada (por defecto el 4 % del patrimonio de partida, más el alquiler si lo incluyes); el gasto es <strong>bruto</strong> y de él salen los impuestos, que se estiman abajo para darte el neto mensual.</p>
       <form id="form-simulador" class="stacked-form">
-        <label>Gasto anual deseado (€)
-          <input name="gastoAnual" type="number" step="any" min="0" value="${meta.jubilacionGastoAnual ?? ""}" required />
+        <label>Tasa de retirada anual (%) — regla del 4 %
+          <input name="tasaRetiradaPct" type="number" step="any" min="0" value="${meta.jubilacionTasaRetiradaPct ?? DEFAULT_TASA_RETIRADA_PCT}" required />
         </label>
+        <label>Patrimonio financiero de partida (€) — en blanco = el real
+          <input name="patrimonioInicial" type="number" step="any" min="0" value="${meta.jubilacionPatrimonioInicial ?? ""}" />
+        </label>
+        <label class="checkbox-label">
+          <input name="incluirPlanes" type="checkbox" ${meta.jubilacionIncluirPlanes !== false ? "checked" : ""} />
+          Incluir planes de pensiones (${fmtEUR(compTotal.planesTotal)}; tributan aparte al rescatarlos)
+        </label>
+        <label class="checkbox-label">
+          <input name="incluirLiquidez" type="checkbox" ${meta.jubilacionIncluirLiquidez !== false ? "checked" : ""} />
+          Incluir liquidez: cuentas y depósitos (${fmtEUR(compTotal.liquidezTotal)})
+        </label>
+        <p class="muted" id="ayuda-patrimonio"></p>
+        <label>Gasto anual deseado BRUTO (€) — en blanco = regla de retirada
+          <input name="gastoAnual" type="number" step="any" min="0" value="${meta.jubilacionGastoAnual ?? ""}" />
+        </label>
+        <div class="btn-row">
+          <button type="button" class="link-btn" id="btn-usar-regla">Usar la regla de retirada (borrar el gasto indicado)</button>
+        </div>
         <label>Rentabilidad anual esperada de la cartera (%)
           <input name="rentabilidadPct" type="number" step="any" value="${meta.jubilacionRentabilidadPct ?? ""}" required />
         </label>
@@ -378,6 +443,28 @@ export function renderSimuladores(container) {
           <input name="incluirAlquileres" type="checkbox" ${meta.jubilacionIncluirAlquileres ? "checked" : ""} />
           Incluir ingresos por alquiler (${fmtEUR(alquiler)}/año hoy)
         </label>
+        <details class="supuestos">
+          <summary>Supuestos fiscales (editables)</summary>
+          <label>Contribuyentes entre los que se reparte (gananciales = 2)
+            <input name="contribuyentes" type="number" step="1" min="1" value="${meta.jubilacionContribuyentes ?? 2}" />
+          </label>
+          <label>Otras rentas anuales de base general del hogar (€) — solo para saber en qué tramo caen alquiler y planes
+            <input name="otrasRentasGeneral" type="number" step="any" min="0" value="${meta.jubilacionOtrasRentasGeneral ?? 0}" />
+          </label>
+          <label>Interés medio de cuentas y depósitos (%/año)
+            <input name="interesLiquidezPct" type="number" step="any" min="0" value="${meta.jubilacionInteresLiquidezPct ?? DEFAULT_INTERES_LIQUIDEZ_PCT}" />
+          </label>
+          <label>% de plusvalía en lo que se retira de fondos — en blanco = el de tu cartera hoy (${fmtPct(compTotal.plusvaliaPct)})
+            <input name="plusvaliaPct" type="number" step="any" min="0" max="100" value="${meta.jubilacionPlusvaliaPct ?? ""}" />
+          </label>
+          <label>Gastos deducibles del alquiler (% sobre el alquiler: IBI, comunidad, seguro, amortización…)
+            <input name="gastosAlquilerPct" type="number" step="any" min="0" max="100" value="${meta.jubilacionGastosAlquilerPct ?? 0}" />
+          </label>
+          <label>Reducción del rendimiento neto del alquiler (%) — la que te corresponda por tu contrato (a 0 se grava entero)
+            <input name="reduccionAlquilerPct" type="number" step="any" min="0" max="100" value="${meta.jubilacionReduccionAlquilerPct ?? 0}" />
+          </label>
+          <p class="muted">Las reducciones del alquiler de vivienda dependen de la fecha del contrato y de la zona, y el Real Decreto-ley 29/2026 (octubre) las ha modificado: por eso empiezan a 0 %. Consúltalo con tu gestor. Las escalas del IRPF se editan en Ajustes.</p>
+        </details>
         <div class="btn-row">
           <button type="submit">Calcular</button>
         </div>
@@ -439,29 +526,84 @@ export function renderSimuladores(container) {
   const form = container.querySelector("#form-simulador");
   const resultadoDiv = container.querySelector("#resultado-simulador");
 
-  function calcularYMostrar() {
+  // Un campo en blanco se guarda como null (= "usa el valor por defecto").
+  const numOpcional = (fd, nombre) => {
+    const v = fd.get(nombre);
+    return v === null || String(v).trim() === "" ? null : Number(v);
+  };
+
+  function leerParametros() {
     const fd = new FormData(form);
-    const params = {
-      gastoAnual: Number(fd.get("gastoAnual")),
+    return {
+      tasaRetiradaPct: numOpcional(fd, "tasaRetiradaPct") ?? DEFAULT_TASA_RETIRADA_PCT,
+      patrimonioInicial: numOpcional(fd, "patrimonioInicial"),
+      incluirPlanes: fd.get("incluirPlanes") === "on",
+      incluirLiquidez: fd.get("incluirLiquidez") === "on",
+      gastoAnual: numOpcional(fd, "gastoAnual"),
       rentabilidadPct: Number(fd.get("rentabilidadPct")),
       inflacionPct: Number(fd.get("inflacionPct")),
       incluirAlquileres: fd.get("incluirAlquileres") === "on",
+      contribuyentes: numOpcional(fd, "contribuyentes") ?? 2,
+      otrasRentasGeneral: numOpcional(fd, "otrasRentasGeneral") ?? 0,
+      interesLiquidezPct: numOpcional(fd, "interesLiquidezPct") ?? DEFAULT_INTERES_LIQUIDEZ_PCT,
+      plusvaliaPct: numOpcional(fd, "plusvaliaPct"),
+      gastosAlquilerPct: numOpcional(fd, "gastosAlquilerPct") ?? 0,
+      reduccionAlquilerPct: numOpcional(fd, "reduccionAlquilerPct") ?? 0,
     };
+  }
+
+  function calcularYMostrar() {
+    const params = leerParametros();
     store.updateMeta({
+      jubilacionTasaRetiradaPct: params.tasaRetiradaPct,
+      jubilacionPatrimonioInicial: params.patrimonioInicial,
+      jubilacionIncluirPlanes: params.incluirPlanes,
+      jubilacionIncluirLiquidez: params.incluirLiquidez,
       jubilacionGastoAnual: params.gastoAnual,
       jubilacionRentabilidadPct: params.rentabilidadPct,
       jubilacionInflacionPct: params.inflacionPct,
       jubilacionIncluirAlquileres: params.incluirAlquileres,
+      jubilacionContribuyentes: params.contribuyentes,
+      jubilacionOtrasRentasGeneral: params.otrasRentasGeneral,
+      jubilacionInteresLiquidezPct: params.interesLiquidezPct,
+      jubilacionPlusvaliaPct: params.plusvaliaPct,
+      jubilacionGastosAlquilerPct: params.gastosAlquilerPct,
+      jubilacionReduccionAlquilerPct: params.reduccionAlquilerPct,
     });
-    resultadoDiv.innerHTML = resultadoHtml(duracionPatrimonio(params));
+    const sim = simulacionRetirada(params);
+    const duracion = duracionPatrimonio({
+      gastoAnual: sim.gastoBruto,
+      rentabilidadPct: params.rentabilidadPct,
+      inflacionPct: params.inflacionPct,
+      incluirAlquileres: params.incluirAlquileres,
+      patrimonioInicial: sim.patrimonioBase,
+    });
+    resultadoDiv.innerHTML = resultadoHtml(duracion, sim);
   }
+
+  // Ayuda en vivo: patrimonio real con las casillas marcadas y gasto que
+  // saldría con la regla, para que se vea el valor por defecto antes de calcular.
+  const ayudaPatrimonio = container.querySelector("#ayuda-patrimonio");
+  function refrescarAyuda() {
+    const p = leerParametros();
+    const s = simulacionRetirada({ ...p, gastoAnual: null });
+    ayudaPatrimonio.textContent = `Patrimonio financiero real con estas casillas: ${fmtEUR(s.patrimonioReal)}. Con la regla del ${fmtPct(s.tasaRetiradaPct)}${s.alquiler > 0 ? " más el alquiler" : ""}, el gasto bruto anual sería ${fmtEUR(s.gastoBruto)} (${fmtEUR(s.gastoBruto / 12)}/mes).`;
+  }
+  form.addEventListener("input", refrescarAyuda);
+  refrescarAyuda();
+
+  container.querySelector("#btn-usar-regla").addEventListener("click", () => {
+    form.querySelector('[name="gastoAnual"]').value = "";
+    refrescarAyuda();
+    if (form.reportValidity()) calcularYMostrar();
+  });
 
   form.addEventListener("submit", (ev) => {
     ev.preventDefault();
     calcularYMostrar();
   });
 
-  if (meta.jubilacionGastoAnual != null && meta.jubilacionRentabilidadPct != null) {
+  if (meta.jubilacionRentabilidadPct != null) {
     calcularYMostrar();
   }
 

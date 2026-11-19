@@ -87,6 +87,38 @@ export const DEFAULT_TRAMOS_AHORRO = [
   { hasta: null, pct: 30 },
 ];
 
+// IRPF sobre la BASE GENERAL (alquileres y rescates de planes de pensiones,
+// que tributan como rendimientos del trabajo): escala estatal (art. 63 LIRPF,
+// sin cambios en 2026) + escala autonómica de Galicia (DL 1/2011, art. 4;
+// tramos hasta 12.985,35 / 21.068,60 / 35.200 / 60.000 €). Verificado contra
+// el informe de tributación autonómica de Hacienda y la guía de ATRIGA. El
+// mínimo personal (estatal 5.550 €, Galicia 5.789 €) no reduce la renta: se
+// resta de la cuota la que saldría de aplicar la escala a ese mínimo. Todo
+// editable en Ajustes por si cambia la normativa o la residencia fiscal.
+export const DEFAULT_TRAMOS_GENERAL_ESTATAL = [
+  { hasta: 12450, pct: 9.5 },
+  { hasta: 20200, pct: 12 },
+  { hasta: 35200, pct: 15 },
+  { hasta: 60000, pct: 18.5 },
+  { hasta: 300000, pct: 22.5 },
+  { hasta: null, pct: 24.5 },
+];
+export const DEFAULT_TRAMOS_GENERAL_AUTONOMICA = [
+  { hasta: 12985.35, pct: 9 },
+  { hasta: 21068.6, pct: 11.65 },
+  { hasta: 35200, pct: 14.9 },
+  { hasta: 60000, pct: 18.4 },
+  { hasta: null, pct: 22.5 },
+];
+export const DEFAULT_MINIMO_PERSONAL_ESTATAL = 5550;
+export const DEFAULT_MINIMO_PERSONAL_AUTONOMICO = 5789;
+
+// Simulador "¿Cuánto dura mi patrimonio?": regla de retirada del 4 % (Bengen /
+// estudio Trinity: retirada inicial del 4 % del capital, actualizada luego
+// con la inflación) y supuesto de tipo de interés de cuentas y depósitos.
+export const DEFAULT_TASA_RETIRADA_PCT = 4;
+export const DEFAULT_INTERES_LIQUIDEZ_PCT = 2;
+
 // Impuesto sobre el Patrimonio — escala autonómica de Galicia (2025-2026):
 // misma tarifa que la estatal subsidiaria, con una bonificación general del
 // 50% sobre la cuota íntegra. Mínimo exento: 700.000 € por contribuyente
@@ -174,6 +206,22 @@ export function emptyData() {
       jubilacionRentabilidadPct: null,
       jubilacionInflacionPct: DEFAULT_INFLACION_PCT,
       jubilacionIncluirAlquileres: true,
+      // Regla de retirada: gasto vacío (null) = tasa × patrimonio de partida.
+      jubilacionTasaRetiradaPct: DEFAULT_TASA_RETIRADA_PCT,
+      jubilacionPatrimonioInicial: null, // null = el patrimonio financiero real
+      jubilacionIncluirPlanes: true,
+      jubilacionIncluirLiquidez: true,
+      // Supuestos fiscales de la estimación del neto.
+      jubilacionContribuyentes: 2,
+      jubilacionOtrasRentasGeneral: 0,
+      jubilacionInteresLiquidezPct: DEFAULT_INTERES_LIQUIDEZ_PCT,
+      jubilacionPlusvaliaPct: null, // null = la de tu cartera hoy
+      jubilacionGastosAlquilerPct: 0,
+      jubilacionReduccionAlquilerPct: 0,
+      tramosGeneralEstatal: DEFAULT_TRAMOS_GENERAL_ESTATAL,
+      tramosGeneralAutonomica: DEFAULT_TRAMOS_GENERAL_AUTONOMICA,
+      minimoPersonalEstatal: DEFAULT_MINIMO_PERSONAL_ESTATAL,
+      minimoPersonalAutonomico: DEFAULT_MINIMO_PERSONAL_AUTONOMICO,
       tramosItpVivienda: DEFAULT_TRAMOS_ITP_VIVIENDA,
       ivaViviendaNuevaPct: DEFAULT_IVA_VIVIENDA_NUEVA_PCT,
       ajdViviendaNuevaPct: DEFAULT_AJD_VIVIENDA_NUEVA_PCT,
